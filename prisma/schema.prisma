@@ -1,0 +1,226 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  ADMIN
+  DIRECTOR
+  CATECHIST
+  PARENT
+}
+
+enum GradeLevel {
+  PRE_K
+  KINDERGARTEN
+  GRADE_1
+  GRADE_2
+  GRADE_3
+  GRADE_4
+  GRADE_5
+  GRADE_6
+  GRADE_7
+  GRADE_8
+  ADULT
+}
+
+enum SacramentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  NOT_APPLICABLE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+  LATE
+}
+
+enum EventType {
+  CLASS
+  RETREAT
+  SERVICE
+  PARISH
+  SACRAMENT
+  OTHER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          Role      @default(PARENT)
+  phone         String?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  catechist     Catechist?
+  parentOf      StudentParent[]
+  announcements Announcement[]
+}
+
+model Catechist {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio                 String?
+  backgroundCheckDate DateTime?
+  backgroundCheckExp  DateTime?
+  certifications      String    @default("[]")
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  classes             ClassCatechist[]
+}
+
+model Student {
+  id            String      @id @default(cuid())
+  firstName     String
+  lastName      String
+  dateOfBirth   DateTime?
+  gradeLevel    GradeLevel
+  address       String?
+  notes         String?
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  parents       StudentParent[]
+  enrollments   Enrollment[]
+  sacraments    SacramentRecord[]
+  attendance    AttendanceRecord[]
+}
+
+model StudentParent {
+  id            String    @id @default(cuid())
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relationship  String    @default("Parent")
+  isPrimary     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@unique([studentId, userId])
+}
+
+model Class {
+  id            String      @id @default(cuid())
+  name          String
+  gradeLevel    GradeLevel
+  program       String
+  description   String?
+  room          String?
+  dayOfWeek     String?
+  startTime     String?
+  endTime       String?
+  academicYear  String
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  catechists    ClassCatechist[]
+  enrollments   Enrollment[]
+  sessions      ClassSession[]
+}
+
+model ClassCatechist {
+  id          String    @id @default(cuid())
+  classId     String
+  class       Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  catechistId String
+  catechist   Catechist @relation(fields: [catechistId], references: [id], onDelete: Cascade)
+  isPrimary   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@unique([classId, catechistId])
+}
+
+model Enrollment {
+  id          String    @id @default(cuid())
+  studentId   String
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId     String
+  class       Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  enrolledAt  DateTime  @default(now())
+  active      Boolean   @default(true)
+
+  @@unique([studentId, classId])
+}
+
+model ClassSession {
+  id          String    @id @default(cuid())
+  classId     String
+  class       Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  date        DateTime
+  topic       String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  attendance  AttendanceRecord[]
+}
+
+model AttendanceRecord {
+  id          String            @id @default(cuid())
+  sessionId   String
+  session     ClassSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status      AttendanceStatus  @default(PRESENT)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([sessionId, studentId])
+}
+
+model SacramentRecord {
+  id              String          @id @default(cuid())
+  studentId       String
+  student         Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sacramentType   String
+  status          SacramentStatus @default(NOT_STARTED)
+  startDate       DateTime?
+  completionDate  DateTime?
+  notes           String?
+  milestones      String          @default("[]")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([studentId, sacramentType])
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  eventType   EventType   @default(OTHER)
+  startDate   DateTime
+  endDate     DateTime?
+  location    String?
+  allDay      Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Announcement {
+  id          String    @id @default(cuid())
+  title       String
+  body        String
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id])
+  targetGroup String    @default("ALL")
+  sentAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
