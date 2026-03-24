@@ -17,6 +17,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  BookMarked,
+  Heart,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -29,6 +31,8 @@ const navItems = [
   { href: "/sacraments", label: "Sacraments", icon: Cross, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
   { href: "/calendar", label: "Calendar", icon: Calendar, roles: ["ADMIN", "DIRECTOR", "CATECHIST", "PARENT"] },
   { href: "/announcements", label: "Announcements", icon: Megaphone, roles: ["ADMIN", "DIRECTOR", "CATECHIST", "PARENT"] },
+  { href: "/curriculum", label: "Curriculum", icon: BookMarked, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
+  { href: "/service-hours", label: "Service Hours", icon: Heart, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/admin", label: "Admin Panel", icon: Settings, roles: ["ADMIN"] },
 ];

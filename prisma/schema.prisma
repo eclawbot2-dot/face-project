@@ -98,6 +98,7 @@ model Student {
   enrollments   Enrollment[]
   sacraments    SacramentRecord[]
   attendance    AttendanceRecord[]
+  serviceHours  ServiceHour[]
 }
 
 model StudentParent {
@@ -223,4 +224,51 @@ model Announcement {
   sentAt      DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+model CurriculumUnit {
+  id            String     @id @default(cuid())
+  gradeLevel    GradeLevel
+  program       String
+  unitNumber    Int
+  title         String
+  description   String?
+  cccReference  String?
+  createdAt     DateTime   @default(now())
+  lessons       Lesson[]
+
+  @@unique([gradeLevel, program, unitNumber])
+}
+
+model Lesson {
+  id              String         @id @default(cuid())
+  unitId          String
+  unit            CurriculumUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  lessonNumber    Int
+  title           String
+  objective       String?
+  scriptureRef    String?
+  cccParagraphs   String?
+  materials       String         @default("[]")
+  activities      String         @default("[]")
+  prayerFocus     String?
+  takeHome        String?
+  notes           String?
+  durationMinutes Int            @default(60)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([unitId, lessonNumber])
+}
+
+model ServiceHour {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date        DateTime
+  hours       Float
+  description String
+  verified    Boolean  @default(false)
+  verifiedBy  String?
+  createdAt   DateTime @default(now())
 }
