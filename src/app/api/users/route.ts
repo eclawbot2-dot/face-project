@@ -45,5 +45,12 @@ export async function POST(req: NextRequest) {
     select: { id: true, name: true, email: true, role: true, phone: true, active: true, createdAt: true },
   });
 
+  // Auto-create Catechist record when role is CATECHIST
+  if (userRole === "CATECHIST") {
+    await prisma.catechist.create({
+      data: { userId: user.id },
+    });
+  }
+
   return NextResponse.json(user, { status: 201 });
 }

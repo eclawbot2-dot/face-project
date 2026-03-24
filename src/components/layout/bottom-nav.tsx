@@ -2,29 +2,43 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   GraduationCap,
   ClipboardCheck,
+  BookOpen,
   BookMarked,
   MoreHorizontal,
 } from "lucide-react";
 
-const bottomItems = [
-  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/students", label: "Students", icon: GraduationCap },
-  { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
-  { href: "/curriculum", label: "Curriculum", icon: BookMarked },
-];
+const bottomItemsByRole: Record<string, Array<{ href: string; label: string; icon: any }>> = {
+  CATECHIST: [
+    { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+    { href: "/classes", label: "My Classes", icon: BookOpen },
+    { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
+    { href: "/curriculum", label: "Curriculum", icon: BookMarked },
+  ],
+  DEFAULT: [
+    { href: "/dashboard", label: "Home", icon: LayoutDashboard },
+    { href: "/students", label: "Students", icon: GraduationCap },
+    { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
+    { href: "/classes", label: "Classes", icon: BookOpen },
+  ],
+};
 
 export function BottomNav({ onMorePress }: { onMorePress?: () => void }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string })?.role ?? "PARENT";
+
+  const items = bottomItemsByRole[role] || bottomItemsByRole.DEFAULT;
 
   return (
     <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30 safe-area-bottom">
       <div className="flex items-center justify-around px-1 py-1">
-        {bottomItems.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active = pathname.startsWith(item.href);
           return (
@@ -32,10 +46,8 @@ export function BottomNav({ onMorePress }: { onMorePress?: () => void }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg min-w-[60px] transition-colors",
-                active
-                  ? "text-[#1e3a5f]"
-                  : "text-gray-400"
+                "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg min-w-[60px] transition-colors relative",
+                active ? "text-[#1e3a5f]" : "text-gray-400"
               )}
             >
               <Icon className={cn("w-5 h-5", active && "stroke-[2.5]")} />

@@ -22,15 +22,16 @@ import {
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "DIRECTOR", "CATECHIST", "PARENT"] },
-  { href: "/students", label: "Students", icon: GraduationCap, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
+  { href: "/students", label: "Students", icon: GraduationCap, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/catechists", label: "Catechists", icon: Users, roles: ["ADMIN", "DIRECTOR"] },
-  { href: "/classes", label: "Classes", icon: BookOpen, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
+  { href: "/classes", label: "My Classes", icon: BookOpen, roles: ["CATECHIST"] },
+  { href: "/classes", label: "Classes", icon: BookOpen, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/attendance", label: "Attendance", icon: ClipboardCheck, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
-  { href: "/sacraments", label: "Sacraments", icon: Cross, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
+  { href: "/sacraments", label: "Sacraments", icon: Cross, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/curriculum", label: "Curriculum", icon: BookMarked, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
-  { href: "/service-hours", label: "Service Hours", icon: Heart, roles: ["ADMIN", "DIRECTOR", "CATECHIST"] },
+  { href: "/service-hours", label: "Service Hours", icon: Heart, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/calendar", label: "Calendar", icon: Calendar, roles: ["ADMIN", "DIRECTOR", "CATECHIST", "PARENT"] },
-  { href: "/announcements", label: "Announcements", icon: Megaphone, roles: ["ADMIN", "DIRECTOR", "CATECHIST", "PARENT"] },
+  { href: "/announcements", label: "Announcements", icon: Megaphone, roles: ["ADMIN", "DIRECTOR", "PARENT"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/admin", label: "Admin Panel", icon: Settings, roles: ["ADMIN"] },
 ];

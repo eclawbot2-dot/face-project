@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = (session.user as { role?: string })?.role;
+  const userId = (session.user as { id?: string })?.id;
   if (!["ADMIN", "DIRECTOR", "CATECHIST"].includes(role ?? "")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -25,9 +26,25 @@ export async function GET(req: NextRequest) {
   const search = searchParams.get("search") ?? "";
   const grade = searchParams.get("grade") ?? "";
 
+  // Catechists can only see students enrolled in their assigned classes
+  let catechistStudentFilter = {};
+  if (role === "CATECHIST") {
+    const catechist = await prisma.catechist.findUnique({ where: { userId } });
+    if (!catechist) return NextResponse.json([]);
+    const assignedClasses = await prisma.classCatechist.findMany({
+      where: { catechistId: catechist.id },
+      select: { classId: true },
+    });
+    const classIds = assignedClasses.map((c) => c.classId);
+    catechistStudentFilter = {
+      enrollments: { some: { classId: { in: classIds }, active: true } },
+    };
+  }
+
   const students = await prisma.student.findMany({
     where: {
       active: true,
+      ...catechistStudentFilter,
       ...(search && {
         OR: [
           { firstName: { contains: search } },

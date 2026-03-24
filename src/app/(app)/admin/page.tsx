@@ -8,6 +8,11 @@ import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { roleLabel } from "@/lib/utils";
 
+interface ClassOption {
+  id: string;
+  name: string;
+}
+
 interface User {
   id: string;
   name: string;
@@ -16,6 +21,7 @@ interface User {
   phone?: string;
   active: boolean;
   createdAt: string;
+  catechist?: { id: string; classes: Array<{ classId: string; class: ClassOption }> };
 }
 
 const ROLES = ["ADMIN", "DIRECTOR", "CATECHIST", "PARENT"];
@@ -44,28 +50,63 @@ export default function AdminPage() {
   const [form, setForm] = useState({
     name: "", email: "", phone: "", password: "", userRole: "PARENT", active: true,
   });
+  const [allClasses, setAllClasses] = useState<ClassOption[]>([]);
+  const [assignedClassIds, setAssignedClassIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     const r = await fetch("/api/users");
     if (!r.ok) { router.push("/dashboard"); return; }
     const data = await r.json();
-    setUsers(Array.isArray(data) ? data : []);
+    // Enrich catechist users with their class assignments
+    const enriched = await Promise.all(
+      (Array.isArray(data) ? data : []).map(async (u: User) => {
+        if (u.role === "CATECHIST") {
+          try {
+            const detail = await fetch(`/api/users/${u.id}`);
+            if (detail.ok) {
+              const d = await detail.json();
+              return { ...u, catechist: d.catechist };
+            }
+          } catch {}
+        }
+        return u;
+      })
+    );
+    setUsers(enriched);
     setLoading(false);
   }, [router]);
 
   useEffect(() => {
     if (role && role !== "ADMIN") { router.push("/dashboard"); return; }
-    if (role === "ADMIN") load();
+    if (role === "ADMIN") {
+      load();
+      fetch("/api/classes").then(r => r.json()).then(d => {
+        if (Array.isArray(d)) setAllClasses(d.map((c: any) => ({ id: c.id, name: c.name })));
+      });
+    }
   }, [role, load, router]);
 
   async function handleSave() {
     const method = editing ? "PATCH" : "POST";
     const url = editing ? `/api/users/${editing.id}` : "/api/users";
-    await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+    const payload = { ...form, ...(form.userRole === "CATECHIST" ? { assignedClassIds } : {}) };
+    const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    
+    // If creating a new catechist, assign classes after user creation
+    if (!editing && form.userRole === "CATECHIST" && res.ok && assignedClassIds.length > 0) {
+      const newUser = await res.json();
+      await fetch(`/api/users/${newUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedClassIds }),
+      });
+    }
+    
     setShowModal(false);
     setEditing(null);
     resetForm();
+    setAssignedClassIds([]);
     load();
   }
 
@@ -92,9 +133,19 @@ export default function AdminPage() {
     setForm({ name: "", email: "", phone: "", password: "", userRole: "PARENT", active: true });
   }
 
-  function openEdit(u: User) {
+  async function openEdit(u: User) {
     setEditing(u);
     setForm({ name: u.name, email: u.email, phone: u.phone ?? "", password: "", userRole: u.role, active: u.active });
+    // Load class assignments for catechists
+    if (u.role === "CATECHIST") {
+      const res = await fetch(`/api/users/${u.id}`);
+      if (res.ok) {
+        const detail = await res.json();
+        setAssignedClassIds(detail.catechist?.classes?.map((c: any) => c.classId) || []);
+      }
+    } else {
+      setAssignedClassIds([]);
+    }
     setShowModal(true);
   }
 
@@ -145,6 +196,7 @@ export default function AdminPage() {
                 <th className="table-header">Name</th>
                 <th className="table-header">Email</th>
                 <th className="table-header">Role</th>
+                <th className="table-header hidden lg:table-cell">Assigned Classes</th>
                 <th className="table-header hidden md:table-cell">Phone</th>
                 <th className="table-header hidden md:table-cell">Status</th>
                 <th className="table-header text-right">Actions</th>
@@ -157,6 +209,17 @@ export default function AdminPage() {
                   <td className="table-cell text-gray-600 text-sm">{u.email}</td>
                   <td className="table-cell">
                     <span className={`badge ${roleColors[u.role] ?? "badge-gray"}`}>{roleLabel(u.role)}</span>
+                  </td>
+                  <td className="table-cell hidden lg:table-cell text-xs text-gray-500">
+                    {u.role === "CATECHIST" && u.catechist?.classes?.length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {u.catechist.classes.map((c: any) => (
+                          <span key={c.classId} className="badge badge-blue text-[10px]">{c.class.name}</span>
+                        ))}
+                      </div>
+                    ) : u.role === "CATECHIST" ? (
+                      <span className="text-orange-500 font-medium">No classes assigned</span>
+                    ) : "—"}
                   </td>
                   <td className="table-cell hidden md:table-cell text-gray-500 text-sm">{u.phone ?? "—"}</td>
                   <td className="table-cell hidden md:table-cell">
@@ -298,8 +361,42 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+          {/* Class Assignment — only for Catechists */}
+          {form.userRole === "CATECHIST" && (
+            <div>
+              <label className="form-label">Assign to Classes *</label>
+              <p className="text-xs text-gray-400 mb-2">Catechist will only see these classes and their students</p>
+              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-50">
+                {allClasses.length === 0 ? (
+                  <div className="p-3 text-sm text-gray-400">No classes available</div>
+                ) : (
+                  allClasses.map((cls) => (
+                    <label key={cls.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={assignedClassIds.includes(cls.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setAssignedClassIds([...assignedClassIds, cls.id]);
+                          } else {
+                            setAssignedClassIds(assignedClassIds.filter((id) => id !== cls.id));
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                      />
+                      <span className="text-sm text-gray-700">{cls.name}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+              {assignedClassIds.length > 0 && (
+                <p className="text-xs text-[#1e3a5f] mt-1 font-medium">{assignedClassIds.length} class{assignedClassIds.length > 1 ? "es" : ""} selected</p>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-3 justify-end pt-2">
-            <button onClick={() => { setShowModal(false); setEditing(null); }} className="btn-secondary">Cancel</button>
+            <button onClick={() => { setShowModal(false); setEditing(null); setAssignedClassIds([]); }} className="btn-secondary">Cancel</button>
             <button onClick={handleSave} className="btn-primary">{editing ? "Save Changes" : "Add User"}</button>
           </div>
         </div>
