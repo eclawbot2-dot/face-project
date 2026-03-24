@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { GraduationCap, Users, BookOpen, BarChart3, Calendar, Megaphone } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { formatDate } from "@/lib/utils";
@@ -23,14 +24,21 @@ const eventTypeColors: Record<string, string> = {
 
 export default function DashboardPage() {
   const { data: session } = useSession();
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const role = (session?.user as { role?: string })?.role;
 
+  // Catechists go straight to their classes — they don't need a dashboard
   useEffect(() => {
+    if (role === "CATECHIST") {
+      router.replace("/classes");
+      return;
+    }
     fetch("/api/dashboard")
       .then((r) => r.json())
       .then((d) => { setData(d); setLoading(false); });
-  }, []);
+  }, [role, router]);
 
   const greeting = () => {
     const h = new Date().getHours();

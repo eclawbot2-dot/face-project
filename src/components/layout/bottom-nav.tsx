@@ -9,16 +9,13 @@ import {
   GraduationCap,
   ClipboardCheck,
   BookOpen,
-  BookMarked,
   MoreHorizontal,
 } from "lucide-react";
 
 const bottomItemsByRole: Record<string, Array<{ href: string; label: string; icon: any }>> = {
   CATECHIST: [
-    { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-    { href: "/classes", label: "My Classes", icon: BookOpen },
+    { href: "/classes", label: "My Class", icon: BookOpen },
     { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
-    { href: "/curriculum", label: "Curriculum", icon: BookMarked },
   ],
   DEFAULT: [
     { href: "/dashboard", label: "Home", icon: LayoutDashboard },
@@ -43,7 +40,7 @@ export function BottomNav({ onMorePress }: { onMorePress?: () => void }) {
           const active = pathname.startsWith(item.href);
           return (
             <Link
-              key={item.href}
+              key={item.href + item.label}
               href={item.href}
               className={cn(
                 "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg min-w-[60px] transition-colors relative",
@@ -60,13 +57,15 @@ export function BottomNav({ onMorePress }: { onMorePress?: () => void }) {
             </Link>
           );
         })}
-        <button
-          onClick={onMorePress}
-          className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg min-w-[60px] text-gray-400"
-        >
-          <MoreHorizontal className="w-5 h-5" />
-          <span className="text-[10px] font-medium">More</span>
-        </button>
+        {role !== "CATECHIST" && (
+          <button
+            onClick={onMorePress}
+            className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg min-w-[60px] text-gray-400"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[10px] font-medium">More</span>
+          </button>
+        )}
       </div>
     </nav>
   );
