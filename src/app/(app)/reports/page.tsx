@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart3, GraduationCap, Users, ClipboardCheck, Cross, Download } from "lucide-react";
+import { BarChart3, GraduationCap, Users, ClipboardCheck, Cross, Download, ArrowRight } from "lucide-react";
 import { gradeLevelLabel, formatDate } from "@/lib/utils";
+import Link from "next/link";
 
 type ReportType = "enrollment" | "attendance" | "sacraments";
 
@@ -61,6 +62,20 @@ export default function ReportsPage() {
           <Download className="w-4 h-4" /> Export CSV
         </button>
       </div>
+
+      {/* Attendance Reports shortcut */}
+      <Link href="/reports/attendance" className="card flex items-center justify-between hover:border-[#1e3a5f] transition-colors group">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-[#1e3a5f] flex items-center justify-center">
+            <ClipboardCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-bold text-[#1e3a5f]">Attendance Reports</h3>
+            <p className="text-xs text-gray-500">Per-class yearly reports with Excel/CSV export</p>
+          </div>
+        </div>
+        <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-[#1e3a5f] transition-colors" />
+      </Link>
 
       {/* Report type tabs */}
       <div className="flex gap-2 flex-wrap">
