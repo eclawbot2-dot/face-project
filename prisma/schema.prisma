@@ -254,6 +254,7 @@ model Lesson {
   prayerFocus     String?
   takeHome        String?
   notes           String?
+  lessonPlan      String?        // Full structured lesson plan (stored as JSON)
   durationMinutes Int            @default(60)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt

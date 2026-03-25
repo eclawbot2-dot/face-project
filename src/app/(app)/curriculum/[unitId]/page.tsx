@@ -11,6 +11,7 @@ import { gradeLevelLabel } from "@/lib/utils";
 
 interface Lesson {
   id: string;
+  unitId: string;
   lessonNumber: number;
   title: string;
   objective: string | null;
@@ -172,10 +173,20 @@ function LessonCard({ lesson, defaultOpen }: { lesson: Lesson; defaultOpen?: boo
             </div>
           )}
 
+          {/* Lesson Plan Link */}
+          <div className="border-t border-gray-200 pt-3">
+            <Link
+              href={`/curriculum/${lesson.unitId}/lesson/${lesson.id}`}
+              className="btn-primary text-sm inline-flex items-center gap-2"
+            >
+              <BookOpen className="w-4 h-4" /> View Full Lesson Plan
+            </Link>
+          </div>
+
           {/* Notes */}
           {lesson.notes && (
             <div className="text-sm text-gray-500 italic border-t border-gray-200 pt-3">
-              <span className="font-medium text-gray-600">Catechist Notes: </span>
+              <span className="font-medium text-gray-600">ADW Alignment: </span>
               {lesson.notes}
             </div>
           )}
