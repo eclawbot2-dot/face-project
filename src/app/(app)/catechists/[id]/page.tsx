@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Save, Shield, BookOpen, Plus, X } from 'lucide-react';
+import { ArrowLeft, Save, Shield, BookOpen, Plus, X, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate, gradeLevelLabel } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface Catechist {
   id: string;
@@ -36,6 +37,7 @@ export default function CatechistDetailPage() {
   const [saveMsg, setSaveMsg] = useState('');
   const [certs, setCerts] = useState<string[]>([]);
   const [newCert, setNewCert] = useState('');
+  const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<EditForm>();
 
@@ -79,6 +81,15 @@ export default function CatechistDetailPage() {
   };
   const removeCert = (i: number) => setCerts(certs.filter((_, idx) => idx !== i));
 
+  const deactivate = async () => {
+    await fetch(`/api/users/${catechist?.user.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: false }),
+    });
+    router.push('/catechists');
+  };
+
   const bgCheckExpired = catechist?.backgroundCheckExp && new Date(catechist.backgroundCheckExp) < new Date();
 
   if (loading) return <div className="p-8 text-center text-gray-400">Loading...</div>;
@@ -95,6 +106,14 @@ export default function CatechistDetailPage() {
           <p className="text-gray-500 text-sm">{catechist.user.email}</p>
         </div>
         {!catechist.user.active && <span className="badge badge-red">Inactive</span>}
+        {catechist.user.active && (
+          <button
+            onClick={() => setShowDeactivateDialog(true)}
+            className="btn-secondary text-red-600 border-red-200 hover:bg-red-50 flex items-center gap-2 text-sm"
+          >
+            <Trash2 className="w-4 h-4" /> Deactivate
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -200,6 +219,16 @@ export default function CatechistDetailPage() {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={showDeactivateDialog}
+        onClose={() => setShowDeactivateDialog(false)}
+        onConfirm={deactivate}
+        title="Deactivate Catechist"
+        message="This catechist will no longer be able to log in. You can reactivate them from the Admin panel."
+        confirmLabel="Deactivate"
+        danger
+      />
     </div>
   );
 }

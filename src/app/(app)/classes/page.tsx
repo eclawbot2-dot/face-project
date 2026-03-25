@@ -49,7 +49,7 @@ export default function ClassesPage() {
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ClassForm>({
     resolver: zodResolver(classSchema),
-    defaultValues: { academicYear: '2024-2025' },
+    defaultValues: { academicYear: '2025-2026' },
   });
 
   const load = async () => {
@@ -78,7 +78,7 @@ export default function ClassesPage() {
     });
     if (res.ok) {
       setShowModal(false);
-      reset({ academicYear: '2024-2025' });
+      reset({ academicYear: '2025-2026' });
       load();
     } else {
       const err = await res.json();
@@ -94,7 +94,7 @@ export default function ClassesPage() {
           <h1 className="text-2xl font-bold text-[#1e3a5f]">Classes</h1>
           <p className="text-gray-500 text-sm mt-1">{classes.length} active classes</p>
         </div>
-        <button onClick={() => { reset({ academicYear: '2024-2025' }); setShowModal(true); }} className="btn-primary flex items-center gap-2">
+        <button onClick={() => { reset({ academicYear: '2025-2026' }); setShowModal(true); }} className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" /> Add Class
         </button>
       </div>
@@ -177,7 +177,7 @@ export default function ClassesPage() {
             </div>
             <div>
               <label className="form-label">Academic Year *</label>
-              <input {...register('academicYear')} className="form-input" placeholder="e.g. 2024-2025" />
+              <input {...register('academicYear')} className="form-input" placeholder="e.g. 2025-2026" />
               {errors.academicYear && <p className="text-red-500 text-xs mt-1">{errors.academicYear.message}</p>}
             </div>
           </div>

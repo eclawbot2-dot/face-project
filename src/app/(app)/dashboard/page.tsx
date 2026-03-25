@@ -64,7 +64,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats — all clickable */}
       {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
@@ -73,10 +73,10 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Students" value={data?.stats.students ?? 0} icon={GraduationCap} color="blue" />
-          <StatCard title="Catechists" value={data?.stats.catechists ?? 0} icon={Users} color="gold" />
-          <StatCard title="Classes" value={data?.stats.classes ?? 0} icon={BookOpen} color="green" />
-          <StatCard title="Attendance Rate" value={`${data?.stats.attendanceRate ?? 0}%`} icon={BarChart3} color="purple" subtitle="Last 30 sessions" />
+          <StatCard title="Students" value={data?.stats.students ?? 0} icon={GraduationCap} color="blue" href="/students" />
+          <StatCard title="Catechists" value={data?.stats.catechists ?? 0} icon={Users} color="gold" href="/catechists" />
+          <StatCard title="Classes" value={data?.stats.classes ?? 0} icon={BookOpen} color="green" href="/classes" />
+          <StatCard title="Attendance Rate" value={`${data?.stats.attendanceRate ?? 0}%`} icon={BarChart3} color="purple" subtitle="Last 30 sessions" href="/attendance" />
         </div>
       )}
 
@@ -96,7 +96,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-3">
               {data?.upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors">
+                <Link key={event.id} href="/calendar" className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors cursor-pointer block">
                   <div className="text-center min-w-[40px]">
                     <div className="text-xs text-gray-400 uppercase">
                       {new Date(event.startDate).toLocaleDateString("en-US", { month: "short" })}
@@ -112,7 +112,7 @@ export default function DashboardPage() {
                   <span className={`${eventTypeColors[event.eventType] ?? "badge-gray"} badge flex-shrink-0`}>
                     {event.eventType.charAt(0) + event.eventType.slice(1).toLowerCase()}
                   </span>
-                </div>
+                </Link>
               ))}
             </div>
           )}
@@ -133,11 +133,11 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-3">
               {data?.recentAnnouncements.map((a) => (
-                <div key={a.id} className="p-3 rounded-lg bg-gray-50">
+                <Link key={a.id} href="/announcements" className="block p-3 rounded-lg bg-gray-50 hover:bg-blue-50 transition-colors">
                   <div className="font-medium text-gray-800 text-sm">{a.title}</div>
                   <div className="text-xs text-gray-500 mt-1 line-clamp-2">{a.body}</div>
                   <div className="text-xs text-gray-400 mt-1">By {a.author.name} · {formatDate(a.createdAt)}</div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

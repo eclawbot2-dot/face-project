@@ -2,11 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ChevronLeft, ChevronRight, Plus, Calendar, MapPin, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar, MapPin, Clock, Edit, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { formatDate } from '@/lib/utils';
 
 const EVENT_TYPES = ['CLASS', 'RETREAT', 'SERVICE', 'PARISH', 'SACRAMENT', 'OTHER'] as const;
+
+const eventTypeLabels: Record<string, string> = {
+  CLASS: 'Class',
+  RETREAT: 'Retreat',
+  SERVICE: 'Service',
+  PARISH: 'Parish',
+  SACRAMENT: 'Sacrament',
+  OTHER: 'Other',
+};
 
 const eventColors: Record<string, string> = {
   CLASS: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -49,9 +59,12 @@ export default function CalendarPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
+  const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
   const [view, setView] = useState<'month' | 'list'>('month');
+  const [deleteEventId, setDeleteEventId] = useState<string | null>(null);
+  const [saveMsg, setSaveMsg] = useState('');
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<EventForm>();
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<EventForm>();
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -68,16 +81,52 @@ export default function CalendarPage() {
 
   useEffect(() => { load(); }, [year, month]);
 
+  const openNew = () => {
+    setEditingEvent(null);
+    reset({ eventType: 'OTHER', allDay: false });
+    setShowModal(true);
+  };
+
+  const openEdit = (e: EventItem) => {
+    setSelectedEvent(null);
+    setEditingEvent(e);
+    reset({
+      title: e.title,
+      description: e.description || '',
+      eventType: e.eventType,
+      startDate: e.startDate ? new Date(e.startDate).toISOString().slice(0, 16) : '',
+      endDate: e.endDate ? new Date(e.endDate).toISOString().slice(0, 16) : '',
+      location: e.location || '',
+      allDay: e.allDay,
+    });
+    setShowModal(true);
+  };
+
   const onSubmit = async (data: EventForm) => {
     setSaving(true);
-    await fetch('/api/events', {
-      method: 'POST',
+    const url = editingEvent ? `/api/events/${editingEvent.id}` : '/api/events';
+    const method = editingEvent ? 'PATCH' : 'POST';
+    await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     setShowModal(false);
     reset();
+    setEditingEvent(null);
     setSaving(false);
+    setSaveMsg(editingEvent ? 'Event updated!' : 'Event added!');
+    setTimeout(() => setSaveMsg(''), 2500);
+    load();
+  };
+
+  const deleteEvent = async () => {
+    if (!deleteEventId) return;
+    await fetch(`/api/events/${deleteEventId}`, { method: 'DELETE' });
+    setDeleteEventId(null);
+    setSelectedEvent(null);
+    setSaveMsg('Event deleted');
+    setTimeout(() => setSaveMsg(''), 2000);
     load();
   };
 
@@ -109,6 +158,7 @@ export default function CalendarPage() {
           <p className="text-gray-500 text-sm mt-1">Events and class schedules</p>
         </div>
         <div className="flex items-center gap-2">
+          {saveMsg && <span className="text-green-600 text-sm font-medium">{saveMsg}</span>}
           <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
             {(['month', 'list'] as const).map(v => (
               <button key={v} onClick={() => setView(v)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${view === v ? 'bg-white text-[#1e3a5f] shadow-sm' : 'text-gray-500'}`}>
@@ -116,7 +166,7 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
-          <button onClick={() => { reset({ eventType: 'OTHER', allDay: false }); setShowModal(true); }} className="btn-primary flex items-center gap-2">
+          <button onClick={openNew} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" /> Add Event
           </button>
         </div>
@@ -190,7 +240,7 @@ export default function CalendarPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-gray-800">{e.title}</h3>
-                    <span className={`badge ${eventColors[e.eventType]}`}>{e.eventType}</span>
+                    <span className={`badge ${eventColors[e.eventType]}`}>{eventTypeLabels[e.eventType] || e.eventType}</span>
                   </div>
                   {e.location && (
                     <div className="flex items-center gap-1 text-sm text-gray-500">
@@ -210,22 +260,36 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Event detail modal */}
+      {/* Event detail modal — with edit and delete */}
       <Modal open={!!selectedEvent} onClose={() => setSelectedEvent(null)} title={selectedEvent?.title || ''} size="sm">
         {selectedEvent && (
           <div className="space-y-3">
-            <span className={`badge ${eventColors[selectedEvent.eventType]}`}>{selectedEvent.eventType}</span>
+            <span className={`badge ${eventColors[selectedEvent.eventType]}`}>{eventTypeLabels[selectedEvent.eventType] || selectedEvent.eventType}</span>
             <div className="text-sm text-gray-600 space-y-2">
               <div><strong>Date:</strong> {formatDate(selectedEvent.startDate)}</div>
               {selectedEvent.location && <div className="flex items-center gap-1"><MapPin className="w-3 h-3 text-gray-400" /> {selectedEvent.location}</div>}
               {selectedEvent.description && <p>{selectedEvent.description}</p>}
             </div>
+            <div className="flex justify-between pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setDeleteEventId(selectedEvent.id)}
+                className="btn-secondary text-red-600 border-red-200 hover:bg-red-50 flex items-center gap-2 text-sm"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+              <button
+                onClick={() => openEdit(selectedEvent)}
+                className="btn-primary flex items-center gap-2 text-sm"
+              >
+                <Edit className="w-4 h-4" /> Edit Event
+              </button>
+            </div>
           </div>
         )}
       </Modal>
 
-      {/* Add Event Modal */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Add New Event" size="lg">
+      {/* Add/Edit Event Modal */}
+      <Modal open={showModal} onClose={() => { setShowModal(false); setEditingEvent(null); }} title={editingEvent ? 'Edit Event' : 'Add New Event'} size="lg">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <label className="form-label">Event Title *</label>
@@ -235,7 +299,7 @@ export default function CalendarPage() {
             <div>
               <label className="form-label">Event Type</label>
               <select {...register('eventType')} className="form-select">
-                {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {EVENT_TYPES.map(t => <option key={t} value={t}>{eventTypeLabels[t]}</option>)}
               </select>
             </div>
             <div>
@@ -262,11 +326,21 @@ export default function CalendarPage() {
             <textarea {...register('description')} className="form-input" rows={3} />
           </div>
           <div className="flex gap-3 justify-end pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
-            <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving...' : 'Add Event'}</button>
+            <button type="button" onClick={() => { setShowModal(false); setEditingEvent(null); }} className="btn-secondary">Cancel</button>
+            <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving...' : editingEvent ? 'Save Changes' : 'Add Event'}</button>
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!deleteEventId}
+        onClose={() => setDeleteEventId(null)}
+        onConfirm={deleteEvent}
+        title="Delete Event"
+        message="Permanently delete this event? This cannot be undone."
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   );
 }

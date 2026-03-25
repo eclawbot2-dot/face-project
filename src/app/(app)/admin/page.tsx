@@ -3,14 +3,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Settings, Users, Plus, Edit, Trash2, Key, CheckCircle, XCircle } from "lucide-react";
+import { Settings, Users, Plus, Edit, Trash2, Key, CheckCircle, XCircle, GraduationCap, BookOpen, BarChart3, Upload, ChevronDown, ChevronUp } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { roleLabel } from "@/lib/utils";
+import Link from "next/link";
 
 interface ClassOption {
   id: string;
   name: string;
+  enrollments?: { id: string }[];
 }
 
 interface User {
@@ -46,12 +48,22 @@ export default function AdminPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [saveMsg, setSaveMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [classDropdownOpen, setClassDropdownOpen] = useState(false);
 
   const [form, setForm] = useState({
     name: "", email: "", phone: "", password: "", userRole: "PARENT", active: true,
   });
   const [allClasses, setAllClasses] = useState<ClassOption[]>([]);
   const [assignedClassIds, setAssignedClassIds] = useState<string[]>([]);
+
+  // Manage classes modal
+  const [showManageClassesModal, setShowManageClassesModal] = useState(false);
+  const [managingUser, setManagingUser] = useState<User | null>(null);
+  const [managingClassIds, setManagingClassIds] = useState<string[]>([]);
+  const [managingClassDropdownOpen, setManagingClassDropdownOpen] = useState(false);
+  const [managingSaving, setManagingSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,12 +94,13 @@ export default function AdminPage() {
     if (role === "ADMIN") {
       load();
       fetch("/api/classes").then(r => r.json()).then(d => {
-        if (Array.isArray(d)) setAllClasses(d.map((c: any) => ({ id: c.id, name: c.name })));
+        if (Array.isArray(d)) setAllClasses(d.map((c: any) => ({ id: c.id, name: c.name, enrollments: c.enrollments })));
       });
     }
   }, [role, load, router]);
 
   async function handleSave() {
+    setSaving(true);
     const method = editing ? "PATCH" : "POST";
     const url = editing ? `/api/users/${editing.id}` : "/api/users";
     const payload = { ...form, ...(form.userRole === "CATECHIST" ? { assignedClassIds } : {}) };
@@ -107,6 +120,9 @@ export default function AdminPage() {
     setEditing(null);
     resetForm();
     setAssignedClassIds([]);
+    setSaving(false);
+    setSaveMsg("User saved!");
+    setTimeout(() => setSaveMsg(""), 2500);
     load();
   }
 
@@ -129,8 +145,24 @@ export default function AdminPage() {
     setNewPassword("");
   }
 
+  async function handleManageClasses() {
+    if (!managingUser) return;
+    setManagingSaving(true);
+    await fetch(`/api/users/${managingUser.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignedClassIds: managingClassIds }),
+    });
+    setShowManageClassesModal(false);
+    setManagingUser(null);
+    setManagingClassIds([]);
+    setManagingSaving(false);
+    load();
+  }
+
   function resetForm() {
     setForm({ name: "", email: "", phone: "", password: "", userRole: "PARENT", active: true });
+    setClassDropdownOpen(false);
   }
 
   async function openEdit(u: User) {
@@ -146,11 +178,35 @@ export default function AdminPage() {
     } else {
       setAssignedClassIds([]);
     }
+    setClassDropdownOpen(false);
     setShowModal(true);
+  }
+
+  async function openManageClasses(u: User) {
+    setManagingUser(u);
+    const res = await fetch(`/api/users/${u.id}`);
+    if (res.ok) {
+      const detail = await res.json();
+      setManagingClassIds(detail.catechist?.classes?.map((c: any) => c.classId) || []);
+    }
+    setManagingClassDropdownOpen(false);
+    setShowManageClassesModal(true);
   }
 
   const activeUsers = users.filter((u) => u.active);
   const inactiveUsers = users.filter((u) => !u.active);
+  const catechistCount = activeUsers.filter(u => u.role === "CATECHIST").length;
+  const classCount = allClasses.length;
+
+  const selectedClassNames = assignedClassIds
+    .map(id => allClasses.find(c => c.id === id)?.name)
+    .filter(Boolean)
+    .join(", ");
+
+  const managingSelectedNames = managingClassIds
+    .map(id => allClasses.find(c => c.id === id)?.name)
+    .filter(Boolean)
+    .join(", ");
 
   if (loading) return <div className="space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="card h-12 animate-pulse bg-gray-100" />)}</div>;
 
@@ -163,9 +219,29 @@ export default function AdminPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">Manage users, roles, and system settings</p>
         </div>
-        <button onClick={() => { resetForm(); setEditing(null); setShowModal(true); }} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add User
-        </button>
+        {saveMsg && <span className="text-green-600 text-sm font-medium">{saveMsg}</span>}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Add User", icon: Plus, color: "bg-blue-50 text-[#1e3a5f]", action: () => { resetForm(); setEditing(null); setShowModal(true); } },
+          { label: "Add Class", icon: BookOpen, color: "bg-yellow-50 text-[#c9a227]", href: "/classes" },
+          { label: "Import Students", icon: Upload, color: "bg-green-50 text-green-700", href: "/students" },
+          { label: "View Reports", icon: BarChart3, color: "bg-purple-50 text-purple-700", href: "/reports" },
+        ].map((item, i) => {
+          const Icon = item.icon;
+          const inner = (
+            <div className="flex flex-col items-center gap-2 p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer text-center">
+              <div className={`p-3 rounded-xl ${item.color}`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-medium text-gray-700">{item.label}</span>
+            </div>
+          );
+          if (item.href) return <Link key={i} href={item.href}>{inner}</Link>;
+          return <button key={i} onClick={item.action}>{inner}</button>;
+        })}
       </div>
 
       {/* Stats */}
@@ -182,12 +258,32 @@ export default function AdminPage() {
         })}
       </div>
 
+      {/* Class stats with student counts */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-bold text-[#1e3a5f] flex items-center gap-2"><GraduationCap className="w-5 h-5" /> Class Summary</h2>
+          <Link href="/classes" className="text-sm text-[#1e3a5f] hover:underline">Manage classes →</Link>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {allClasses.slice(0, 8).map(c => (
+            <Link key={c.id} href={`/classes/${c.id}`} className="flex items-center justify-between p-3 bg-gray-50 hover:bg-blue-50 rounded-xl transition-colors">
+              <span className="text-sm font-medium text-gray-700 truncate">{c.name}</span>
+              <span className="badge badge-blue ml-2 flex-shrink-0">{c.enrollments?.length ?? 0}</span>
+            </Link>
+          ))}
+          {allClasses.length === 0 && <p className="text-sm text-gray-400 col-span-4">No classes yet</p>}
+        </div>
+      </div>
+
       {/* Users Table */}
       <div className="card p-0 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="font-bold text-[#1e3a5f] flex items-center gap-2">
             <Users className="w-5 h-5" /> Active Users ({activeUsers.length})
           </h2>
+          <button onClick={() => { resetForm(); setEditing(null); setShowModal(true); }} className="btn-primary flex items-center gap-2 text-sm">
+            <Plus className="w-4 h-4" /> Add User
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -230,6 +326,15 @@ export default function AdminPage() {
                   </td>
                   <td className="table-cell text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {u.role === "CATECHIST" && (
+                        <button
+                          onClick={() => openManageClasses(u)}
+                          className="px-2 py-1 text-xs rounded-lg bg-blue-50 text-[#1e3a5f] hover:bg-blue-100 font-medium"
+                          title="Manage Classes"
+                        >
+                          Classes
+                        </button>
+                      )}
                       <button onClick={() => openEdit(u)} className="p-1.5 rounded-lg hover:bg-yellow-50 text-gray-400 hover:text-[#c9a227]" title="Edit">
                         <Edit className="w-4 h-4" />
                       </button>
@@ -322,7 +427,7 @@ export default function AdminPage() {
       </div>
 
       {/* Add/Edit User Modal */}
-      <Modal open={showModal} onClose={() => { setShowModal(false); setEditing(null); }} title={editing ? "Edit User" : "Add New User"} size="md">
+      <Modal open={showModal} onClose={() => { setShowModal(false); setEditing(null); setClassDropdownOpen(false); }} title={editing ? "Edit User" : "Add New User"} size="md">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -347,9 +452,22 @@ export default function AdminPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="form-label">Role *</label>
-              <select value={form.userRole} onChange={(e) => setForm({ ...form, userRole: e.target.value })} className="form-select">
-                {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
-              </select>
+              <div className="flex flex-wrap gap-2">
+                {ROLES.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setForm({ ...form, userRole: r })}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                      form.userRole === r
+                        ? "bg-[#1e3a5f] text-white border-[#1e3a5f]"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-[#1e3a5f]"
+                    }`}
+                  >
+                    {roleLabel(r)}
+                  </button>
+                ))}
+              </div>
             </div>
             {editing && (
               <div>
@@ -361,43 +479,130 @@ export default function AdminPage() {
               </div>
             )}
           </div>
-          {/* Class Assignment — only for Catechists */}
+          {/* Class Assignment — dropdown multi-select for Catechists */}
           {form.userRole === "CATECHIST" && (
             <div>
-              <label className="form-label">Assign to Classes *</label>
+              <label className="form-label">Assign to Classes</label>
               <p className="text-xs text-gray-400 mb-2">Catechist will only see these classes and their students</p>
-              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-50">
-                {allClasses.length === 0 ? (
-                  <div className="p-3 text-sm text-gray-400">No classes available</div>
-                ) : (
-                  allClasses.map((cls) => (
-                    <label key={cls.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={assignedClassIds.includes(cls.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setAssignedClassIds([...assignedClassIds, cls.id]);
-                          } else {
-                            setAssignedClassIds(assignedClassIds.filter((id) => id !== cls.id));
-                          }
-                        }}
-                        className="w-4 h-4 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
-                      />
-                      <span className="text-sm text-gray-700">{cls.name}</span>
-                    </label>
-                  ))
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setClassDropdownOpen(!classDropdownOpen)}
+                  className="form-input flex items-center justify-between w-full text-left"
+                >
+                  <span className={assignedClassIds.length === 0 ? "text-gray-400" : "text-gray-800"}>
+                    {assignedClassIds.length === 0
+                      ? "Select classes..."
+                      : `${assignedClassIds.length} class${assignedClassIds.length > 1 ? "es" : ""} selected`}
+                  </span>
+                  {classDropdownOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                </button>
+                {classDropdownOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    {allClasses.length === 0 ? (
+                      <div className="p-3 text-sm text-gray-400">No classes available</div>
+                    ) : (
+                      allClasses.map((cls) => (
+                        <label key={cls.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={assignedClassIds.includes(cls.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setAssignedClassIds([...assignedClassIds, cls.id]);
+                              } else {
+                                setAssignedClassIds(assignedClassIds.filter((id) => id !== cls.id));
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                          />
+                          <span className="text-sm text-gray-700">{cls.name}</span>
+                          {assignedClassIds.includes(cls.id) && <CheckCircle className="w-3.5 h-3.5 text-[#1e3a5f] ml-auto" />}
+                        </label>
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
               {assignedClassIds.length > 0 && (
-                <p className="text-xs text-[#1e3a5f] mt-1 font-medium">{assignedClassIds.length} class{assignedClassIds.length > 1 ? "es" : ""} selected</p>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {assignedClassIds.map(id => {
+                    const cls = allClasses.find(c => c.id === id);
+                    return cls ? (
+                      <span key={id} className="badge badge-blue flex items-center gap-1 text-xs">
+                        {cls.name}
+                        <button type="button" onClick={() => setAssignedClassIds(assignedClassIds.filter(i => i !== id))} className="hover:text-red-600 ml-1">×</button>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
               )}
             </div>
           )}
 
           <div className="flex gap-3 justify-end pt-2">
-            <button onClick={() => { setShowModal(false); setEditing(null); setAssignedClassIds([]); }} className="btn-secondary">Cancel</button>
-            <button onClick={handleSave} className="btn-primary">{editing ? "Save Changes" : "Add User"}</button>
+            <button onClick={() => { setShowModal(false); setEditing(null); setAssignedClassIds([]); setClassDropdownOpen(false); }} className="btn-secondary">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="btn-primary">{saving ? "Saving..." : editing ? "Save Changes" : "Add User"}</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Manage Classes Modal */}
+      <Modal open={showManageClassesModal} onClose={() => { setShowManageClassesModal(false); setManagingUser(null); setManagingClassDropdownOpen(false); }} title={`Manage Classes — ${managingUser?.name}`} size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">Select which classes this catechist is assigned to.</p>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setManagingClassDropdownOpen(!managingClassDropdownOpen)}
+              className="form-input flex items-center justify-between w-full text-left"
+            >
+              <span className={managingClassIds.length === 0 ? "text-gray-400" : "text-gray-800"}>
+                {managingClassIds.length === 0
+                  ? "Select classes..."
+                  : `${managingClassIds.length} class${managingClassIds.length > 1 ? "es" : ""} selected`}
+              </span>
+              {managingClassDropdownOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+            </button>
+            {managingClassDropdownOpen && (
+              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                {allClasses.map((cls) => (
+                  <label key={cls.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={managingClassIds.includes(cls.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setManagingClassIds([...managingClassIds, cls.id]);
+                        } else {
+                          setManagingClassIds(managingClassIds.filter((id) => id !== cls.id));
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                    />
+                    <span className="text-sm text-gray-700">{cls.name}</span>
+                    {managingClassIds.includes(cls.id) && <CheckCircle className="w-3.5 h-3.5 text-[#1e3a5f] ml-auto" />}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          {managingClassIds.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {managingClassIds.map(id => {
+                const cls = allClasses.find(c => c.id === id);
+                return cls ? (
+                  <span key={id} className="badge badge-blue flex items-center gap-1 text-xs">
+                    {cls.name}
+                    <button type="button" onClick={() => setManagingClassIds(managingClassIds.filter(i => i !== id))} className="hover:text-red-600 ml-1">×</button>
+                  </span>
+                ) : null;
+              })}
+            </div>
+          )}
+          <div className="flex gap-3 justify-end pt-2">
+            <button onClick={() => { setShowManageClassesModal(false); setManagingUser(null); }} className="btn-secondary">Cancel</button>
+            <button onClick={handleManageClasses} disabled={managingSaving} className="btn-primary">{managingSaving ? "Saving..." : "Save Class Assignments"}</button>
           </div>
         </div>
       </Modal>
