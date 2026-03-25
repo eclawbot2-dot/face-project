@@ -134,7 +134,7 @@ export async function GET(req: NextRequest) {
       csv += `"Year: ${cls.year}"\n\n`;
 
       // Header row
-      const headers = ["Student Name", ...cls.sessionDates.map((d) => d.dateFormatted), "Present", "Absent", "Excused", "Late", "Rate"];
+      const headers = ["Student Name", ...cls.sessionDates.map((d) => d.dateFormatted), "Present", "Absent", "Tardy", "Rate"];
       csv += headers.map((h) => `"${h}"`).join(",") + "\n";
 
       // Student rows
@@ -144,8 +144,7 @@ export async function GET(req: NextRequest) {
           const shortStatus: Record<string, string> = {
             PRESENT: "P",
             ABSENT: "A",
-            EXCUSED: "E",
-            LATE: "L",
+            LATE: "T",
             "N/R": "-",
           };
           return shortStatus[status] ?? status;
@@ -156,7 +155,6 @@ export async function GET(req: NextRequest) {
           ...sessionCols,
           student.present.toString(),
           student.absent.toString(),
-          student.excused.toString(),
           student.late.toString(),
           student.attendanceRate !== null ? `${student.attendanceRate}%` : "N/A",
         ];

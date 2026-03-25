@@ -50,8 +50,8 @@ export function attendanceStatusLabel(status: string): string {
   const map: Record<string, string> = {
     PRESENT: "Present",
     ABSENT: "Absent",
+    LATE: "Tardy",
     EXCUSED: "Excused",
-    LATE: "Late",
   };
   return map[status] ?? status;
 }

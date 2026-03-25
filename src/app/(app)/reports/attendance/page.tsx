@@ -44,8 +44,8 @@ interface ClassReport {
 const statusShort: Record<string, string> = {
   PRESENT: 'P',
   ABSENT: 'A',
+  LATE: 'T',
   EXCUSED: 'E',
-  LATE: 'L',
   'N/R': '-',
 };
 
@@ -226,8 +226,7 @@ export default function AttendanceReportsPage() {
                               ))}
                               <th className="px-2 py-2 text-center text-[10px] text-gray-500 font-semibold uppercase bg-gray-100">P</th>
                               <th className="px-2 py-2 text-center text-[10px] text-gray-500 font-semibold uppercase bg-gray-100">A</th>
-                              <th className="px-2 py-2 text-center text-[10px] text-gray-500 font-semibold uppercase bg-gray-100">E</th>
-                              <th className="px-2 py-2 text-center text-[10px] text-gray-500 font-semibold uppercase bg-gray-100">L</th>
+                              <th className="px-2 py-2 text-center text-[10px] text-gray-500 font-semibold uppercase bg-gray-100">T</th>
                               <th className="px-2 py-2 text-center text-[10px] text-gray-500 font-semibold uppercase bg-gray-100">Rate</th>
                             </tr>
                           </thead>
@@ -249,7 +248,6 @@ export default function AttendanceReportsPage() {
                                 })}
                                 <td className="px-2 py-2 text-center text-xs font-medium text-green-600">{student.present}</td>
                                 <td className="px-2 py-2 text-center text-xs font-medium text-red-600">{student.absent}</td>
-                                <td className="px-2 py-2 text-center text-xs font-medium text-blue-600">{student.excused}</td>
                                 <td className="px-2 py-2 text-center text-xs font-medium text-yellow-600">{student.late}</td>
                                 <td className="px-2 py-2 text-center">
                                   <span className={`badge text-[10px] ${
@@ -272,8 +270,7 @@ export default function AttendanceReportsPage() {
                       <div className="text-xs text-gray-400">
                         <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-50 text-green-600 text-[8px] font-bold text-center leading-3">P</span> Present</span>
                         <span className="ml-2 inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-50 text-red-600 text-[8px] font-bold text-center leading-3">A</span> Absent</span>
-                        <span className="ml-2 inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-50 text-blue-600 text-[8px] font-bold text-center leading-3">E</span> Excused</span>
-                        <span className="ml-2 inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-50 text-yellow-600 text-[8px] font-bold text-center leading-3">L</span> Late</span>
+                        <span className="ml-2 inline-flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-50 text-yellow-600 text-[8px] font-bold text-center leading-3">T</span> Tardy</span>
                       </div>
                       <button
                         onClick={() => {

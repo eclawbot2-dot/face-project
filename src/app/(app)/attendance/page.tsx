@@ -27,11 +27,12 @@ type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'LATE';
 const statusIcon: Record<AttendanceStatus, React.ReactNode> = {
   PRESENT: <CheckCircle2 className="w-6 h-6 text-green-500" />,
   ABSENT: <XCircle className="w-6 h-6 text-red-500" />,
-  EXCUSED: <MinusCircle className="w-6 h-6 text-blue-500" />,
   LATE: <Clock className="w-6 h-6 text-yellow-500" />,
+  EXCUSED: <MinusCircle className="w-6 h-6 text-blue-500" />,
 };
 
-const statusOrder: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'EXCUSED', 'LATE'];
+// Only 3 choices: Present, Absent, Tardy
+const statusOrder: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LATE'];
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -323,8 +324,8 @@ function AttendancePage() {
                         className={`flex items-center justify-between p-3 sm:p-4 rounded-xl cursor-pointer transition-colors select-none active:scale-[0.98] ${
                           status === 'PRESENT' ? 'bg-green-50 hover:bg-green-100' :
                           status === 'ABSENT' ? 'bg-red-50 hover:bg-red-100' :
-                          status === 'EXCUSED' ? 'bg-blue-50 hover:bg-blue-100' :
-                          'bg-yellow-50 hover:bg-yellow-100'
+                          status === 'LATE' ? 'bg-yellow-50 hover:bg-yellow-100' :
+                          'bg-blue-50 hover:bg-blue-100'
                         }`}
                       >
                         <div className="flex items-center gap-3">
