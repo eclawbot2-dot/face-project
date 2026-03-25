@@ -1,0 +1,180 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import * as XLSX from "xlsx";
+
+// Map common grade strings to our enum values
+function parseGradeLevel(raw: string): string | null {
+  if (!raw) return null;
+  const s = raw.toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  const map: Record<string, string> = {
+    prek: "PRE_K", preK: "PRE_K", "pre-k": "PRE_K", preschool: "PRE_K",
+    pk: "PRE_K", "pre k": "PRE_K",
+    k: "KINDERGARTEN", kinder: "KINDERGARTEN", kindergarten: "KINDERGARTEN",
+    "1": "GRADE_1", "1st": "GRADE_1", first: "GRADE_1", grade1: "GRADE_1", "1stgrade": "GRADE_1",
+    "2": "GRADE_2", "2nd": "GRADE_2", second: "GRADE_2", grade2: "GRADE_2", "2ndgrade": "GRADE_2",
+    "3": "GRADE_3", "3rd": "GRADE_3", third: "GRADE_3", grade3: "GRADE_3", "3rdgrade": "GRADE_3",
+    "4": "GRADE_4", "4th": "GRADE_4", fourth: "GRADE_4", grade4: "GRADE_4", "4thgrade": "GRADE_4",
+    "5": "GRADE_5", "5th": "GRADE_5", fifth: "GRADE_5", grade5: "GRADE_5", "5thgrade": "GRADE_5",
+    "6": "GRADE_6", "6th": "GRADE_6", sixth: "GRADE_6", grade6: "GRADE_6", "6thgrade": "GRADE_6",
+    "7": "GRADE_7", "7th": "GRADE_7", seventh: "GRADE_7", grade7: "GRADE_7", "7thgrade": "GRADE_7",
+    "8": "GRADE_8", "8th": "GRADE_8", eighth: "GRADE_8", grade8: "GRADE_8", "8thgrade": "GRADE_8",
+    adult: "ADULT",
+  };
+
+  return map[s] ?? null;
+}
+
+// Try to find the right column name from headers
+function findColumn(headers: string[], ...candidates: string[]): string | null {
+  for (const c of candidates) {
+    const found = headers.find(h => h.toLowerCase().replace(/[^a-z]/g, "") === c.toLowerCase().replace(/[^a-z]/g, ""));
+    if (found) return found;
+  }
+  return null;
+}
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const role = (session.user as { role?: string })?.role;
+  if (!["ADMIN", "DIRECTOR"].includes(role ?? "")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    const formData = await req.formData();
+    const file = formData.get("file") as File;
+    if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" }) as Record<string, any>[];
+
+    if (rows.length === 0) {
+      return NextResponse.json({ error: "Spreadsheet is empty" }, { status: 400 });
+    }
+
+    const headers = Object.keys(rows[0]);
+
+    // Find columns flexibly
+    const firstNameCol = findColumn(headers, "firstname", "first name", "first", "fname", "student first name");
+    const lastNameCol = findColumn(headers, "lastname", "last name", "last", "lname", "student last name");
+    const fullNameCol = findColumn(headers, "name", "student name", "full name", "student", "child name", "childs name", "child");
+    const gradeCol = findColumn(headers, "grade", "grade level", "gradelevel", "class", "level");
+    const dobCol = findColumn(headers, "dob", "date of birth", "dateofbirth", "birthday", "birthdate", "birth date");
+    const addressCol = findColumn(headers, "address", "home address", "street address");
+    const parentCol = findColumn(headers, "parent", "parent name", "guardian", "parent guardian", "parentguardian", "mother", "father");
+    const phoneCol = findColumn(headers, "phone", "phone number", "parent phone", "contact", "contact number");
+    const emailCol = findColumn(headers, "email", "parent email", "contact email");
+
+    const hasNameParts = firstNameCol && lastNameCol;
+    const hasFullName = fullNameCol;
+
+    if (!hasNameParts && !hasFullName) {
+      return NextResponse.json({
+        error: `Could not find name columns. Found: ${headers.join(", ")}. Need "First Name" + "Last Name" or "Student Name"`,
+      }, { status: 400 });
+    }
+
+    // Get existing classes for auto-enrollment
+    const allClasses = await prisma.class.findMany({ where: { active: true } });
+
+    const results = {
+      imported: 0,
+      skipped: 0,
+      errors: [] as string[],
+      students: [] as Array<{ name: string; grade: string; enrolled: string }>,
+    };
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2; // 1-indexed + header row
+
+      let firstName = "";
+      let lastName = "";
+
+      if (hasNameParts) {
+        firstName = String(row[firstNameCol!] ?? "").trim();
+        lastName = String(row[lastNameCol!] ?? "").trim();
+      } else if (hasFullName) {
+        const fullName = String(row[fullNameCol!] ?? "").trim();
+        if (!fullName) { results.skipped++; continue; }
+        // Handle "Last, First" or "First Last"
+        if (fullName.includes(",")) {
+          const parts = fullName.split(",").map(s => s.trim());
+          lastName = parts[0] || "";
+          firstName = parts[1] || "";
+        } else {
+          const parts = fullName.split(/\s+/);
+          firstName = parts[0] || "";
+          lastName = parts.slice(1).join(" ") || "";
+        }
+      }
+
+      if (!firstName && !lastName) { results.skipped++; continue; }
+      if (!firstName) firstName = "—";
+      if (!lastName) lastName = "—";
+
+      // Parse grade
+      const rawGrade = gradeCol ? String(row[gradeCol] ?? "") : "";
+      const gradeLevel = parseGradeLevel(rawGrade) || "GRADE_1"; // Default to 1st if not specified
+
+      // Parse DOB
+      let dateOfBirth: Date | null = null;
+      if (dobCol && row[dobCol]) {
+        const raw = row[dobCol];
+        if (typeof raw === "number") {
+          // Excel serial date
+          dateOfBirth = new Date((raw - 25569) * 86400 * 1000);
+        } else {
+          const parsed = new Date(String(raw));
+          if (!isNaN(parsed.getTime())) dateOfBirth = parsed;
+        }
+      }
+
+      const address = addressCol ? String(row[addressCol] ?? "").trim() : undefined;
+
+      try {
+        // Create student
+        const student = await prisma.student.create({
+          data: {
+            firstName,
+            lastName,
+            gradeLevel: gradeLevel as any,
+            dateOfBirth,
+            address: address || undefined,
+          },
+        });
+
+        // Auto-enroll in matching class
+        let enrolledIn = "—";
+        const matchingClass = allClasses.find(c => c.gradeLevel === gradeLevel && c.program === "Faith Formation");
+        const anyMatch = matchingClass || allClasses.find(c => c.gradeLevel === gradeLevel);
+        if (anyMatch) {
+          await prisma.enrollment.create({
+            data: { studentId: student.id, classId: anyMatch.id, active: true },
+          });
+          enrolledIn = anyMatch.name;
+        }
+
+        results.imported++;
+        results.students.push({
+          name: `${firstName} ${lastName}`,
+          grade: rawGrade || gradeLevel,
+          enrolled: enrolledIn,
+        });
+      } catch (err: any) {
+        results.errors.push(`Row ${rowNum} (${firstName} ${lastName}): ${err.message}`);
+      }
+    }
+
+    return NextResponse.json(results);
+  } catch (err: any) {
+    return NextResponse.json({ error: `Failed to process file: ${err.message}` }, { status: 500 });
+  }
+}

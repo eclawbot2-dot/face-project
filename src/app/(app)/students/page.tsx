@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Search, Plus, GraduationCap, User, ChevronRight } from 'lucide-react';
+import { Search, Plus, GraduationCap, User, ChevronRight, Upload, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { cn, formatDate, gradeLevelLabel, GRADE_LEVELS } from '@/lib/utils';
 import Link from 'next/link';
@@ -47,6 +47,15 @@ export default function StudentsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    skipped: number;
+    errors: string[];
+    students: Array<{ name: string; grade: string; enrolled: string }>;
+  } | null>(null);
+
   const { register, handleSubmit, reset, formState: { errors } } = useForm<StudentForm>({
     resolver: zodResolver(studentSchema),
   });
@@ -83,16 +92,47 @@ export default function StudentsPage() {
     setSaving(false);
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/students/import', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        setImportResult(data);
+        load(); // Refresh student list
+      } else {
+        setImportResult({ imported: 0, skipped: 0, errors: [data.error || 'Import failed'], students: [] });
+      }
+    } catch {
+      setImportResult({ imported: 0, skipped: 0, errors: ['Failed to upload file'], students: [] });
+    }
+    setImporting(false);
+    // Reset the file input
+    e.target.value = '';
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#1e3a5f]">Students</h1>
           <p className="text-gray-500 text-sm mt-1">{students.length} active students</p>
         </div>
-        <button onClick={() => { reset(); setShowModal(true); }} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Add Student
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => { setImportResult(null); setShowImportModal(true); }} className="btn-secondary flex items-center gap-2">
+            <Upload className="w-4 h-4" /> Import Excel
+          </button>
+          <button onClick={() => { reset(); setShowModal(true); }} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Add Student
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -237,6 +277,108 @@ export default function StudentsPage() {
             <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving...' : 'Add Student'}</button>
           </div>
         </form>
+      </Modal>
+
+      {/* Import Excel Modal */}
+      <Modal open={showImportModal} onClose={() => setShowImportModal(false)} title="Import Students from Excel" size="lg">
+        <div className="space-y-4">
+          {!importResult ? (
+            <>
+              <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-800">
+                <p className="font-medium mb-2">Your spreadsheet should have columns like:</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <div><strong>First Name</strong> (or "Student Name")</div>
+                  <div><strong>Last Name</strong></div>
+                  <div><strong>Grade</strong> (Pre-K, K, 1st, 2nd, etc.)</div>
+                  <div><strong>Date of Birth</strong> (optional)</div>
+                  <div><strong>Address</strong> (optional)</div>
+                  <div><strong>Parent Name</strong> (optional)</div>
+                </div>
+                <p className="mt-2 text-xs text-blue-600">Accepts .xlsx, .xls, and .csv files. Column names are flexible — it'll figure out what's what.</p>
+              </div>
+
+              <label className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${importing ? 'border-gray-300 bg-gray-50' : 'border-[#1e3a5f]/30 hover:border-[#1e3a5f] hover:bg-blue-50/50'}`}>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  {importing ? (
+                    <>
+                      <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm text-gray-600">Importing students...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileSpreadsheet className="w-10 h-10 text-[#1e3a5f]/40" />
+                      <span className="text-sm text-gray-600 font-medium">Click to upload Excel or CSV file</span>
+                      <span className="text-xs text-gray-400">.xlsx, .xls, or .csv</span>
+                    </>
+                  )}
+                </div>
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleImport}
+                  disabled={importing}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              {/* Results */}
+              <div className={`rounded-xl p-4 ${importResult.imported > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {importResult.imported > 0 ? (
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  ) : null}
+                  <span className={`font-bold ${importResult.imported > 0 ? 'text-green-800' : 'text-red-800'}`}>
+                    {importResult.imported > 0 ? `${importResult.imported} students imported!` : 'Import failed'}
+                  </span>
+                </div>
+                {importResult.skipped > 0 && (
+                  <p className="text-sm text-gray-600">{importResult.skipped} rows skipped (empty names)</p>
+                )}
+              </div>
+
+              {importResult.errors.length > 0 && (
+                <div className="bg-red-50 rounded-xl p-4">
+                  <p className="font-medium text-red-800 text-sm mb-1">Errors:</p>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {importResult.errors.map((err, i) => (
+                      <p key={i} className="text-xs text-red-600">{err}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {importResult.students.length > 0 && (
+                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Student</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Grade</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Enrolled In</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {importResult.students.map((s, i) => (
+                        <tr key={i}>
+                          <td className="px-3 py-2 font-medium text-gray-800">{s.name}</td>
+                          <td className="px-3 py-2 text-gray-500">{s.grade}</td>
+                          <td className="px-3 py-2 text-gray-500">{s.enrolled}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => { setImportResult(null); }} className="btn-secondary">Import More</button>
+                <button onClick={() => setShowImportModal(false)} className="btn-primary">Done</button>
+              </div>
+            </>
+          )}
+        </div>
       </Modal>
     </div>
   );
