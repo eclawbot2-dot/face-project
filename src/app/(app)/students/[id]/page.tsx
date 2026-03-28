@@ -105,6 +105,10 @@ export default function StudentDetailPage() {
   const [parentRelationship, setParentRelationship] = useState('Parent');
   const [addParentSaving, setAddParentSaving] = useState(false);
   const [removeParentId, setRemoveParentId] = useState<string | null>(null);
+  // New parent creation inline
+  const [parentAddMode, setParentAddMode] = useState<'existing' | 'new'>('existing');
+  const [newParentForm, setNewParentForm] = useState({ name: '', email: '', phone: '', password: '' });
+  const [newParentError, setNewParentError] = useState('');
 
   const { register: registerEdit, handleSubmit: handleEditSubmit, reset: resetEdit, formState: { errors: editErrors } } = useForm<EditForm>({
     resolver: zodResolver(editSchema),
@@ -216,22 +220,68 @@ export default function StudentDetailPage() {
     );
     setSelectedParentId('');
     setParentRelationship('Parent');
+    setParentAddMode('existing');
+    setNewParentForm({ name: '', email: '', phone: '', password: '' });
+    setNewParentError('');
     setShowAddParentModal(true);
   };
 
   const addParent = async () => {
-    if (!selectedParentId) return;
     setAddParentSaving(true);
-    await fetch(`/api/students/${id}/parents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parentUserId: selectedParentId, relationship: parentRelationship }),
-    });
-    setShowAddParentModal(false);
-    setAddParentSaving(false);
-    setSaveMsg('Parent added!');
-    setTimeout(() => setSaveMsg(''), 2000);
-    load();
+    setNewParentError('');
+    try {
+      if (parentAddMode === 'new') {
+        // Validate
+        if (!newParentForm.name || !newParentForm.email || !newParentForm.password) {
+          setNewParentError('Name, email, and password are required');
+          setAddParentSaving(false);
+          return;
+        }
+        if (newParentForm.password.length < 8) {
+          setNewParentError('Password must be at least 8 characters');
+          setAddParentSaving(false);
+          return;
+        }
+        // Create the user with PARENT role
+        const createRes = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newParentForm.name,
+            email: newParentForm.email,
+            phone: newParentForm.phone || undefined,
+            password: newParentForm.password,
+            userRole: 'PARENT',
+          }),
+        });
+        if (!createRes.ok) {
+          const err = await createRes.json();
+          setNewParentError(err.error || 'Failed to create parent account');
+          setAddParentSaving(false);
+          return;
+        }
+        const created = await createRes.json();
+        // Link to student
+        await fetch(`/api/students/${id}/parents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentUserId: created.id, relationship: parentRelationship }),
+        });
+      } else {
+        if (!selectedParentId) { setAddParentSaving(false); return; }
+        await fetch(`/api/students/${id}/parents`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentUserId: selectedParentId, relationship: parentRelationship }),
+        });
+      }
+      setShowAddParentModal(false);
+      setSaveMsg('Parent added!');
+      setTimeout(() => setSaveMsg(''), 2000);
+      load();
+    } finally {
+      setAddParentSaving(false);
+    }
   };
 
   const removeParent = async (parentUserId: string) => {
@@ -552,18 +602,61 @@ export default function StudentDetailPage() {
       </Modal>
 
       {/* Add Parent Modal */}
-      <Modal open={showAddParentModal} onClose={() => setShowAddParentModal(false)} title="Add Parent/Guardian" size="sm">
+      <Modal open={showAddParentModal} onClose={() => setShowAddParentModal(false)} title="Add Parent/Guardian" size="md">
         <div className="space-y-4">
-          <div>
-            <label className="form-label">Parent Account</label>
-            <select value={selectedParentId} onChange={e => setSelectedParentId(e.target.value)} className="form-select">
-              <option value="">Choose a parent...</option>
-              {parentUsers.map(u => (
-                <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-              ))}
-            </select>
-            {parentUsers.length === 0 && <p className="text-xs text-gray-400 mt-1">No parent accounts available. Create a user with the Parent role first.</p>}
+          {/* Mode toggle */}
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+            <button
+              onClick={() => { setParentAddMode('existing'); setNewParentError(''); }}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${parentAddMode === 'existing' ? 'bg-white text-[#1e3a5f] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Existing Account
+            </button>
+            <button
+              onClick={() => { setParentAddMode('new'); setNewParentError(''); }}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${parentAddMode === 'new' ? 'bg-white text-[#1e3a5f] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Create New
+            </button>
           </div>
+
+          {newParentError && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{newParentError}</div>}
+
+          {parentAddMode === 'existing' ? (
+            <div>
+              <label className="form-label">Parent Account</label>
+              <select value={selectedParentId} onChange={e => setSelectedParentId(e.target.value)} className="form-select">
+                <option value="">Choose a parent...</option>
+                {parentUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                ))}
+              </select>
+              {parentUsers.length === 0 && <p className="text-xs text-gray-400 mt-1">No available parent accounts. Use "Create New" to add one.</p>}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label">Full Name *</label>
+                  <input className="form-input" placeholder="Jane Smith" value={newParentForm.name} onChange={e => setNewParentForm(f => ({ ...f, name: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="form-label">Phone</label>
+                  <input className="form-input" placeholder="(555) 123-4567" value={newParentForm.phone} onChange={e => setNewParentForm(f => ({ ...f, phone: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Email *</label>
+                <input type="email" className="form-input" placeholder="parent@example.com" value={newParentForm.email} onChange={e => setNewParentForm(f => ({ ...f, email: e.target.value }))} />
+              </div>
+              <div>
+                <label className="form-label">Password *</label>
+                <input type="password" className="form-input" placeholder="Minimum 8 characters" value={newParentForm.password} onChange={e => setNewParentForm(f => ({ ...f, password: e.target.value }))} />
+                <p className="text-xs text-gray-400 mt-1">They can change this later via their profile.</p>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="form-label">Relationship</label>
             <select value={parentRelationship} onChange={e => setParentRelationship(e.target.value)} className="form-select">
@@ -576,8 +669,12 @@ export default function StudentDetailPage() {
           </div>
           <div className="flex gap-3 justify-end">
             <button onClick={() => setShowAddParentModal(false)} className="btn-secondary">Cancel</button>
-            <button onClick={addParent} disabled={addParentSaving || !selectedParentId} className="btn-primary">
-              {addParentSaving ? 'Adding...' : 'Add Parent'}
+            <button
+              onClick={addParent}
+              disabled={addParentSaving || (parentAddMode === 'existing' && !selectedParentId)}
+              className="btn-primary"
+            >
+              {addParentSaving ? 'Adding...' : parentAddMode === 'new' ? 'Create & Add Parent' : 'Add Parent'}
             </button>
           </div>
         </div>

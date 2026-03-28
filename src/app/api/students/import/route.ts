@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
+import bcrypt from "bcryptjs";
 
 // Map common grade strings to our enum values
 function parseGradeLevel(raw: string): string | null {
@@ -87,8 +88,10 @@ export async function POST(req: NextRequest) {
     const results = {
       imported: 0,
       skipped: 0,
+      parentsCreated: 0,
+      parentsLinked: 0,
       errors: [] as string[],
-      students: [] as Array<{ name: string; grade: string; enrolled: string }>,
+      students: [] as Array<{ name: string; grade: string; enrolled: string; parentAdded?: string }>,
     };
 
     for (let i = 0; i < rows.length; i++) {
@@ -139,6 +142,11 @@ export async function POST(req: NextRequest) {
 
       const address = addressCol ? String(row[addressCol] ?? "").trim() : undefined;
 
+      // Parent info from spreadsheet
+      const parentName = parentCol ? String(row[parentCol] ?? "").trim() : "";
+      const parentEmail = emailCol ? String(row[emailCol] ?? "").trim() : "";
+      const parentPhone = phoneCol ? String(row[phoneCol] ?? "").trim() : "";
+
       try {
         // Create student
         const student = await prisma.student.create({
@@ -162,11 +170,49 @@ export async function POST(req: NextRequest) {
           enrolledIn = anyMatch.name;
         }
 
+        // Handle parent info: create or link parent user if email is provided
+        let parentAdded: string | undefined;
+        if (parentEmail) {
+          try {
+            let parentUser = await prisma.user.findUnique({ where: { email: parentEmail } });
+            if (!parentUser) {
+              // Generate a temporary password from student last name + "2024!"
+              const tempPassword = `${lastName.toLowerCase().replace(/\s+/g, "")}2024!`;
+              const hashed = await bcrypt.hash(tempPassword, 12);
+              parentUser = await prisma.user.create({
+                data: {
+                  name: parentName || parentEmail.split("@")[0],
+                  email: parentEmail,
+                  phone: parentPhone || undefined,
+                  password: hashed,
+                  role: "PARENT",
+                },
+              });
+              results.parentsCreated++;
+            } else {
+              results.parentsLinked++;
+            }
+            // Link parent to student (upsert to avoid duplicates)
+            await prisma.studentParent.upsert({
+              where: { studentId_userId: { studentId: student.id, userId: parentUser.id } },
+              create: { studentId: student.id, userId: parentUser.id, relationship: "Parent" },
+              update: {},
+            });
+            parentAdded = parentUser.name;
+          } catch (parentErr: any) {
+            results.errors.push(`Row ${rowNum} parent (${parentEmail}): ${parentErr.message}`);
+          }
+        } else if (parentName && !parentEmail) {
+          // Name but no email — note it but can't create account without email
+          parentAdded = `${parentName} (no email — not created)`;
+        }
+
         results.imported++;
         results.students.push({
           name: `${firstName} ${lastName}`,
           grade: rawGrade || gradeLevel,
           enrolled: enrolledIn,
+          ...(parentAdded ? { parentAdded } : {}),
         });
       } catch (err: any) {
         results.errors.push(`Row ${rowNum} (${firstName} ${lastName}): ${err.message}`);
