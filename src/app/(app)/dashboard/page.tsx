@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Users, BookOpen, BarChart3, Calendar, Megaphone } from "lucide-react";
+import { GraduationCap, Users, BookOpen, BarChart3, Calendar, Megaphone, Heart } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
@@ -147,12 +147,14 @@ export default function DashboardPage() {
       {/* Quick Links */}
       <div className="card">
         <h3 className="font-bold text-[#1e3a5f] mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
             { href: "/students", label: "Add Student", icon: GraduationCap, color: "bg-blue-50 text-[#1e3a5f]" },
             { href: "/attendance", label: "Take Attendance", icon: BarChart3, color: "bg-green-50 text-green-700" },
             { href: "/classes", label: "Manage Classes", icon: BookOpen, color: "bg-yellow-50 text-[#c9a227]" },
             { href: "/announcements", label: "Send Announcement", icon: Megaphone, color: "bg-purple-50 text-purple-700" },
+            { href: "/calendar", label: "View Calendar", icon: Calendar, color: "bg-orange-50 text-orange-700" },
+            ...((role === "ADMIN" || role === "DIRECTOR") ? [{ href: "/service-hours", label: "Service Hours", icon: Heart, color: "bg-red-50 text-red-700" }] : []),
           ].map((item) => {
             const Icon = item.icon;
             return (

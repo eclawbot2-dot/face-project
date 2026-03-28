@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") ?? "";
   const grade = searchParams.get("grade") ?? "";
+  const activeParam = searchParams.get("active") ?? "";
 
   // Catechists can only see students enrolled in their assigned classes
   let catechistStudentFilter = {};
@@ -41,9 +42,14 @@ export async function GET(req: NextRequest) {
     };
   }
 
+  // Determine active filter
+  let activeFilter: boolean | undefined = true;
+  if (activeParam === "false") activeFilter = false;
+  else if (activeParam === "all") activeFilter = undefined;
+
   const students = await prisma.student.findMany({
     where: {
-      active: true,
+      ...(activeFilter !== undefined ? { active: activeFilter } : {}),
       ...catechistStudentFilter,
       ...(search && {
         OR: [

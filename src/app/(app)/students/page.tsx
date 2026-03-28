@@ -43,9 +43,13 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [gradeFilter, setGradeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('active');
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const [allClasses, setAllClasses] = useState<Array<{ id: string; name: string; program: string }>>([]);
+  const [enrollClassId, setEnrollClassId] = useState('');
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -53,7 +57,7 @@ export default function StudentsPage() {
     imported: number;
     skipped: number;
     errors: string[];
-    students: Array<{ name: string; grade: string; enrolled: string }>;
+    students: Array<{ name: string; grade: string; enrolled: string; parentAdded?: string }>;
   } | null>(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<StudentForm>({
@@ -65,13 +69,21 @@ export default function StudentsPage() {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (gradeFilter) params.set('grade', gradeFilter);
+    if (statusFilter === 'inactive') params.set('active', 'false');
+    else if (statusFilter === 'all') params.set('active', 'all');
     const res = await fetch(`/api/students?${params}`);
     const data = await res.json();
     setStudents(Array.isArray(data) ? data : []);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [search, gradeFilter]);
+  useEffect(() => { load(); }, [search, gradeFilter, statusFilter]);
+
+  useEffect(() => {
+    fetch('/api/classes').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setAllClasses(d.map((c: any) => ({ id: c.id, name: c.name, program: c.program })));
+    });
+  }, []);
 
   const onSubmit = async (data: StudentForm) => {
     setSaving(true);
@@ -82,8 +94,18 @@ export default function StudentsPage() {
       body: JSON.stringify(data),
     });
     if (res.ok) {
+      const newStudent = await res.json();
+      // Enroll in class if selected
+      if (enrollClassId && newStudent.id) {
+        await fetch(`/api/classes/${enrollClassId}/enroll`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId: newStudent.id }),
+        });
+      }
       setShowModal(false);
       reset();
+      setEnrollClassId('');
       load();
     } else {
       const err = await res.json();
@@ -150,6 +172,11 @@ export default function StudentsPage() {
         <select className="form-select sm:w-48" value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}>
           <option value="">All Grades</option>
           {GRADE_LEVELS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+        </select>
+        <select className="form-select sm:w-36" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="active">Active Only</option>
+          <option value="inactive">Inactive Only</option>
+          <option value="all">All Students</option>
         </select>
       </div>
 
@@ -265,6 +292,13 @@ export default function StudentsPage() {
             </div>
           </div>
           <div>
+            <label className="form-label">Enroll in Class (optional)</label>
+            <select className="form-select" value={enrollClassId} onChange={e => setEnrollClassId(e.target.value)}>
+              <option value="">Don't enroll yet</option>
+              {allClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="form-label">Address</label>
             <input {...register('address')} className="form-input" />
           </div>
@@ -273,7 +307,7 @@ export default function StudentsPage() {
             <textarea {...register('notes')} className="form-input" rows={3} />
           </div>
           <div className="flex gap-3 justify-end pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={() => { setShowModal(false); setEnrollClassId(''); }} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving...' : 'Add Student'}</button>
           </div>
         </form>
@@ -357,6 +391,7 @@ export default function StudentsPage() {
                         <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Student</th>
                         <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Grade</th>
                         <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Enrolled In</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500">Parent</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -365,6 +400,7 @@ export default function StudentsPage() {
                           <td className="px-3 py-2 font-medium text-gray-800">{s.name}</td>
                           <td className="px-3 py-2 text-gray-500">{s.grade}</td>
                           <td className="px-3 py-2 text-gray-500">{s.enrolled}</td>
+                          <td className="px-3 py-2 text-gray-500">{s.parentAdded || "—"}</td>
                         </tr>
                       ))}
                     </tbody>

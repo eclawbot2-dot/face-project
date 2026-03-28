@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Search, Plus, Users, ChevronRight, Mail, Phone } from 'lucide-react';
+import { Search, Plus, Users, ChevronRight, Mail, Phone, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
@@ -18,6 +18,11 @@ const catechistSchema = z.object({
   notes: z.string().optional(),
 });
 type CatechistForm = z.infer<typeof catechistSchema>;
+
+interface ClassOption {
+  id: string;
+  name: string;
+}
 
 interface Catechist {
   id: string;
@@ -36,6 +41,9 @@ export default function CatechistsPage() {
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [allClasses, setAllClasses] = useState<ClassOption[]>([]);
+  const [assignedClassIds, setAssignedClassIds] = useState<string[]>([]);
+  const [classDropdownOpen, setClassDropdownOpen] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<CatechistForm>({
     resolver: zodResolver(catechistSchema),
@@ -49,7 +57,12 @@ export default function CatechistsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch('/api/classes').then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setAllClasses(d.map((c: any) => ({ id: c.id, name: c.name })));
+    });
+  }, []);
 
   const filtered = catechists.filter(c =>
     !search || c.user.name.toLowerCase().includes(search.toLowerCase()) || c.user.email.toLowerCase().includes(search.toLowerCase())
@@ -64,8 +77,19 @@ export default function CatechistsPage() {
       body: JSON.stringify(data),
     });
     if (res.ok) {
+      const newCatechist = await res.json();
+      // Assign classes if any selected (API returns the user object directly)
+      if (assignedClassIds.length > 0 && newCatechist.id) {
+        await fetch(`/api/users/${newCatechist.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignedClassIds }),
+        });
+      }
       setShowModal(false);
       reset();
+      setAssignedClassIds([]);
+      setClassDropdownOpen(false);
       load();
     } else {
       const err = await res.json();
@@ -196,7 +220,7 @@ export default function CatechistsPage() {
         )}
       </div>
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Add New Catechist" size="lg">
+      <Modal open={showModal} onClose={() => { setShowModal(false); setAssignedClassIds([]); setClassDropdownOpen(false); }} title="Add New Catechist" size="lg">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {error && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
           <div className="grid grid-cols-2 gap-4">
@@ -223,6 +247,59 @@ export default function CatechistsPage() {
             </div>
           </div>
           <div>
+            <label className="form-label">Assign to Classes (optional)</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setClassDropdownOpen(!classDropdownOpen)}
+                className="form-input flex items-center justify-between w-full text-left"
+              >
+                <span className={assignedClassIds.length === 0 ? "text-gray-400" : "text-gray-800"}>
+                  {assignedClassIds.length === 0
+                    ? "Select classes..."
+                    : `${assignedClassIds.length} class${assignedClassIds.length > 1 ? "es" : ""} selected`}
+                </span>
+                {classDropdownOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+              </button>
+              {classDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {allClasses.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-400">No classes available</div>
+                  ) : (
+                    allClasses.map((cls) => (
+                      <label key={cls.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={assignedClassIds.includes(cls.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) setAssignedClassIds([...assignedClassIds, cls.id]);
+                            else setAssignedClassIds(assignedClassIds.filter(id => id !== cls.id));
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                        />
+                        <span className="text-sm text-gray-700">{cls.name}</span>
+                        {assignedClassIds.includes(cls.id) && <CheckCircle className="w-3.5 h-3.5 text-[#1e3a5f] ml-auto" />}
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            {assignedClassIds.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {assignedClassIds.map(id => {
+                  const cls = allClasses.find(c => c.id === id);
+                  return cls ? (
+                    <span key={id} className="badge badge-blue flex items-center gap-1 text-xs">
+                      {cls.name}
+                      <button type="button" onClick={() => setAssignedClassIds(assignedClassIds.filter(i => i !== id))} className="hover:text-red-600 ml-1">×</button>
+                    </span>
+                  ) : null;
+                })}
+              </div>
+            )}
+          </div>
+          <div>
             <label className="form-label">Bio</label>
             <textarea {...register('bio')} className="form-input" rows={2} />
           </div>
@@ -231,7 +308,7 @@ export default function CatechistsPage() {
             <textarea {...register('notes')} className="form-input" rows={2} />
           </div>
           <div className="flex gap-3 justify-end pt-2">
-            <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
+            <button type="button" onClick={() => { setShowModal(false); setAssignedClassIds([]); setClassDropdownOpen(false); }} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving...' : 'Add Catechist'}</button>
           </div>
         </form>

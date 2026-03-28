@@ -43,6 +43,7 @@ export default function ClassesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [gradeFilter, setGradeFilter] = useState('');
+  const [programFilter, setProgramFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -64,9 +65,11 @@ export default function ClassesPage() {
 
   useEffect(() => { load(); }, [gradeFilter]);
 
-  const filtered = classes.filter(c =>
-    !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.program.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = classes.filter(c => {
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase()) && !c.program.toLowerCase().includes(search.toLowerCase())) return false;
+    if (programFilter && c.program !== programFilter) return false;
+    return true;
+  });
 
   const onSubmit = async (data: ClassForm) => {
     setSaving(true);
@@ -113,6 +116,10 @@ export default function ClassesPage() {
         <select className="form-select sm:w-48" value={gradeFilter} onChange={e => setGradeFilter(e.target.value)}>
           <option value="">All Grades</option>
           {GRADE_LEVELS.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+        </select>
+        <select className="form-select sm:w-56" value={programFilter} onChange={e => setProgramFilter(e.target.value)}>
+          <option value="">All Programs</option>
+          {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
       </div>
 

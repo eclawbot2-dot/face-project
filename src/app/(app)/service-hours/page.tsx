@@ -79,9 +79,7 @@ export default function ServiceHoursPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ verified, verifiedBy: verified ? "Catechist" : null }),
       });
-      setHours((prev) =>
-        prev.map((h) => h.id === id ? { ...h, verified, verifiedBy: verified ? "Catechist" : null } : h)
-      );
+      await loadData();
     } catch {
       setError("Failed to update record");
     }
@@ -91,7 +89,7 @@ export default function ServiceHoursPage() {
     if (!confirm("Delete this service hour record?")) return;
     try {
       await fetch(`/api/service-hours/${id}`, { method: "DELETE" });
-      setHours((prev) => prev.filter((h) => h.id !== id));
+      await loadData();
     } catch {
       setError("Failed to delete record");
     }
@@ -116,10 +114,9 @@ export default function ServiceHoursPage() {
         }),
       });
       if (!res.ok) throw new Error("Failed to save");
-      const newHour = await res.json();
-      setHours((prev) => [newHour, ...prev]);
       setShowAddModal(false);
       setForm({ studentId: "", date: new Date().toISOString().split("T")[0], hours: "", description: "" });
+      await loadData();
     } catch {
       setError("Failed to save record");
     } finally {

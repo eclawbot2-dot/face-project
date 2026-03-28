@@ -168,13 +168,29 @@ export default function CatechistDetailPage() {
                   </span>
                 ))}
               </div>
+              <div className="mb-2">
+                <p className="text-xs text-gray-500 mb-1">Quick add:</p>
+                <div className="flex flex-wrap gap-1">
+                  {["Safe Environment", "Catechist Formation", "CPR/First Aid", "Virtus Training", "Archdiocesan Certification"].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => { if (!certs.includes(suggestion)) setCerts([...certs, suggestion]); }}
+                      disabled={certs.includes(suggestion)}
+                      className="px-2 py-1 text-xs rounded-lg border border-gray-200 bg-gray-50 text-gray-600 hover:bg-blue-50 hover:border-[#1e3a5f] hover:text-[#1e3a5f] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      + {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={newCert}
                   onChange={e => setNewCert(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCert(); } }}
-                  placeholder="Add certification..."
+                  placeholder="Add custom certification..."
                   className="form-input flex-1"
                 />
                 <button type="button" onClick={addCert} className="btn-secondary flex items-center gap-1">

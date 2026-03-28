@@ -31,8 +31,8 @@ const statusIcon: Record<AttendanceStatus, React.ReactNode> = {
   EXCUSED: <MinusCircle className="w-6 h-6 text-blue-500" />,
 };
 
-// Only 3 choices: Present, Absent, Tardy
-const statusOrder: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LATE'];
+// 4 choices: Present → Absent → Tardy → Excused
+const statusOrder: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'];
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

@@ -3,10 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Settings, Users, Plus, Edit, Trash2, Key, CheckCircle, XCircle, GraduationCap, BookOpen, BarChart3, Upload, ChevronDown, ChevronUp } from "lucide-react";
+import { Settings, Users, Plus, Edit, Trash2, Key, CheckCircle, XCircle, GraduationCap, BookOpen, BarChart3, Upload, ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { roleLabel } from "@/lib/utils";
+import { roleLabel, gradeLevelLabel } from "@/lib/utils";
 import Link from "next/link";
 
 interface ClassOption {
@@ -42,6 +42,12 @@ export default function AdminPage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adminStats, setAdminStats] = useState<{
+    totalEvents: number;
+    totalAnnouncements: number;
+    pendingServiceHours: number;
+    studentsWithoutParents: Array<{ id: string; firstName: string; lastName: string; gradeLevel: string }>;
+  } | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -51,6 +57,8 @@ export default function AdminPage() {
   const [saveMsg, setSaveMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [classDropdownOpen, setClassDropdownOpen] = useState(false);
+
+  const [userSearch, setUserSearch] = useState("");
 
   const [form, setForm] = useState({
     name: "", email: "", phone: "", password: "", userRole: "PARENT", active: true,
@@ -87,6 +95,30 @@ export default function AdminPage() {
     );
     setUsers(enriched);
     setLoading(false);
+    // Load admin stats
+    try {
+      const [eventsRes, annRes, shRes, studentsRes] = await Promise.all([
+        fetch("/api/events"),
+        fetch("/api/announcements"),
+        fetch("/api/service-hours"),
+        fetch("/api/students?active=all"),
+      ]);
+      const [eventsData, annData, shData, studentsData] = await Promise.all([
+        eventsRes.json(), annRes.json(), shRes.json(), studentsRes.json(),
+      ]);
+      const pendingServiceHours = Array.isArray(shData) ? shData.filter((h: any) => !h.verified).length : 0;
+      const studentsWithoutParents = Array.isArray(studentsData)
+        ? studentsData.filter((s: any) => !s.parents || s.parents.length === 0).map((s: any) => ({
+            id: s.id, firstName: s.firstName, lastName: s.lastName, gradeLevel: s.gradeLevel,
+          }))
+        : [];
+      setAdminStats({
+        totalEvents: Array.isArray(eventsData) ? eventsData.length : 0,
+        totalAnnouncements: Array.isArray(annData) ? annData.length : 0,
+        pendingServiceHours,
+        studentsWithoutParents,
+      });
+    } catch {}
   }, [router]);
 
   useEffect(() => {
@@ -193,7 +225,14 @@ export default function AdminPage() {
     setShowManageClassesModal(true);
   }
 
-  const activeUsers = users.filter((u) => u.active);
+  const activeUsers = users.filter((u) => {
+    if (!u.active) return false;
+    if (userSearch) {
+      const q = userSearch.toLowerCase();
+      return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+    }
+    return true;
+  });
   const inactiveUsers = users.filter((u) => !u.active);
   const catechistCount = activeUsers.filter(u => u.role === "CATECHIST").length;
   const classCount = allClasses.length;
@@ -244,6 +283,28 @@ export default function AdminPage() {
         })}
       </div>
 
+      {/* Admin quick stats */}
+      {adminStats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Link href="/calendar" className="card text-center hover:border-[#1e3a5f] transition-colors">
+            <div className="text-3xl font-bold text-[#1e3a5f]">{adminStats.totalEvents}</div>
+            <div className="text-sm text-gray-500 mt-1">Total Events</div>
+          </Link>
+          <Link href="/announcements" className="card text-center hover:border-[#1e3a5f] transition-colors">
+            <div className="text-3xl font-bold text-[#c9a227]">{adminStats.totalAnnouncements}</div>
+            <div className="text-sm text-gray-500 mt-1">Announcements</div>
+          </Link>
+          <Link href="/service-hours" className="card text-center hover:border-[#1e3a5f] transition-colors">
+            <div className={`text-3xl font-bold ${adminStats.pendingServiceHours > 0 ? "text-amber-600" : "text-green-600"}`}>{adminStats.pendingServiceHours}</div>
+            <div className="text-sm text-gray-500 mt-1">Pending Service Hours</div>
+          </Link>
+          <div className={`card text-center ${adminStats.studentsWithoutParents.length > 0 ? "border-red-200 bg-red-50" : ""}`}>
+            <div className={`text-3xl font-bold ${adminStats.studentsWithoutParents.length > 0 ? "text-red-600" : "text-green-600"}`}>{adminStats.studentsWithoutParents.length}</div>
+            <div className="text-sm text-gray-500 mt-1">Students Without Parents</div>
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {ROLES.map((r) => {
@@ -257,6 +318,35 @@ export default function AdminPage() {
           );
         })}
       </div>
+
+      {/* Students Without Parents */}
+      {adminStats && adminStats.studentsWithoutParents.length > 0 && (
+        <div className="card border-red-200">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-red-700 flex items-center gap-2">
+              <Users className="w-5 h-5" /> Students Without Parents ({adminStats.studentsWithoutParents.length})
+            </h2>
+            <Link href="/students" className="text-sm text-[#1e3a5f] hover:underline">View all students →</Link>
+          </div>
+          <p className="text-sm text-gray-500 mb-3">These students have no parent/guardian linked to their account. Consider adding parent accounts for communication and visibility.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {adminStats.studentsWithoutParents.slice(0, 12).map(s => (
+              <Link key={s.id} href={`/students/${s.id}`} className="flex items-center gap-3 p-2.5 bg-red-50 hover:bg-red-100 rounded-lg transition-colors">
+                <div className="w-7 h-7 rounded-full bg-red-200 flex items-center justify-center text-red-800 text-xs font-bold flex-shrink-0">
+                  {s.firstName[0]}{s.lastName[0]}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-gray-800 truncate">{s.firstName} {s.lastName}</div>
+                  <div className="text-xs text-gray-500">{gradeLevelLabel(s.gradeLevel)}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+          {adminStats.studentsWithoutParents.length > 12 && (
+            <p className="text-xs text-gray-400 mt-2 text-center">+{adminStats.studentsWithoutParents.length - 12} more students</p>
+          )}
+        </div>
+      )}
 
       {/* Class stats with student counts */}
       <div className="card">
@@ -277,13 +367,25 @@ export default function AdminPage() {
 
       {/* Users Table */}
       <div className="card p-0 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <h2 className="font-bold text-[#1e3a5f] flex items-center gap-2">
             <Users className="w-5 h-5" /> Active Users ({activeUsers.length})
           </h2>
-          <button onClick={() => { resetForm(); setEditing(null); setShowModal(true); }} className="btn-primary flex items-center gap-2 text-sm">
-            <Plus className="w-4 h-4" /> Add User
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search users..."
+                className="form-input pl-9 py-1.5 text-sm w-48"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+              />
+            </div>
+            <button onClick={() => { resetForm(); setEditing(null); setShowModal(true); }} className="btn-primary flex items-center gap-2 text-sm">
+              <Plus className="w-4 h-4" /> Add User
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -301,7 +403,13 @@ export default function AdminPage() {
             <tbody className="divide-y divide-gray-50">
               {activeUsers.map((u) => (
                 <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="table-cell font-medium text-gray-900">{u.name}</td>
+                  <td className="table-cell font-medium text-gray-900">
+                    {u.role === "CATECHIST" && u.catechist?.id ? (
+                      <Link href={`/catechists/${u.catechist.id}`} className="text-[#1e3a5f] hover:underline">{u.name}</Link>
+                    ) : (
+                      <button onClick={() => openEdit(u)} className="text-[#1e3a5f] hover:underline text-left">{u.name}</button>
+                    )}
+                  </td>
                   <td className="table-cell text-gray-600 text-sm">{u.email}</td>
                   <td className="table-cell">
                     <span className={`badge ${roleColors[u.role] ?? "badge-gray"}`}>{roleLabel(u.role)}</span>

@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       const present = s.attendance.filter((a) => a.status === "PRESENT" || a.status === "LATE").length;
       return {
         sessionId: s.id,
+        classId: s.class.id,
         className: s.class.name,
         date: s.date,
         total,

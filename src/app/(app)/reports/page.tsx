@@ -8,7 +8,7 @@ import Link from "next/link";
 type ReportType = "enrollment" | "attendance" | "sacraments";
 
 interface EnrollmentRow { id: string; name: string; gradeLevel: string; program: string; enrolled: number; catechists: string[] }
-interface AttendanceRow { sessionId: string; className: string; date: string; total: number; present: number; absent: number; rate: number }
+interface AttendanceRow { sessionId: string; classId: string; className: string; date: string; total: number; present: number; absent: number; rate: number }
 interface SacramentRow { type: string; total: number; completed: number; inProgress: number; notStarted: number }
 
 export default function ReportsPage() {
@@ -136,7 +136,9 @@ export default function ReportsPage() {
                     <tbody className="divide-y divide-gray-50">
                       {(data as EnrollmentRow[]).map((row) => (
                         <tr key={row.id} className="hover:bg-gray-50">
-                          <td className="table-cell font-medium">{row.name}</td>
+                          <td className="table-cell font-medium">
+                            <Link href={`/classes/${row.id}`} className="text-[#1e3a5f] hover:underline">{row.name}</Link>
+                          </td>
                           <td className="table-cell"><span className="badge badge-blue">{gradeLevelLabel(row.gradeLevel)}</span></td>
                           <td className="table-cell text-gray-500">{row.program}</td>
                           <td className="table-cell">
@@ -189,7 +191,9 @@ export default function ReportsPage() {
                     <tbody className="divide-y divide-gray-50">
                       {(data as AttendanceRow[]).map((row) => (
                         <tr key={row.sessionId} className="hover:bg-gray-50">
-                          <td className="table-cell font-medium text-sm">{row.className}</td>
+                          <td className="table-cell font-medium text-sm">
+                            <Link href={`/classes/${row.classId}`} className="text-[#1e3a5f] hover:underline">{row.className}</Link>
+                          </td>
                           <td className="table-cell text-sm text-gray-500">{formatDate(row.date)}</td>
                           <td className="table-cell text-sm">{row.present}</td>
                           <td className="table-cell text-sm">{row.absent}</td>
