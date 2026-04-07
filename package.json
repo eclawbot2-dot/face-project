@@ -1,16 +1,16 @@
 {
-  "name": "face-project",
+  "name": "construction-project",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3100",
+    "dev": "next dev -p 3101",
     "build": "next build",
-    "start": "next start -p 3100",
+    "start": "next start -p 3101",
     "lint": "eslint",
     "db:generate": "npx prisma generate",
-    "db:migrate": "npx prisma migrate deploy",
+    "db:push": "npx prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
-    "setup": "npm run db:generate && npm run db:migrate && npm run db:seed"
+    "setup": "npm run db:generate && npm run db:push && npm run db:seed"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
@@ -35,7 +35,6 @@
     "react-dom": "19.2.4",
     "react-hook-form": "^7.72.0",
     "tailwind-merge": "^3.5.0",
-    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

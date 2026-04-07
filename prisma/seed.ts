@@ -1,443 +1,320 @@
-import { PrismaClient } from "@prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import bcrypt from "bcryptjs";
+import "dotenv/config";
 import path from "path";
+import bcrypt from "bcryptjs";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaClient, ProjectMode, ProjectStage, TaskStatus, ThreadChannel, UserRoleTemplate, WorkflowStatus, DocumentClass, BudgetLineType } from "@prisma/client";
 
-const rawUrl = process.env.DATABASE_URL ?? `file:${path.join(process.cwd(), "prisma", "dev.db")}`;
-const adapter = new PrismaBetterSqlite3({ url: rawUrl });
+const configuredDbUrl = process.env.DATABASE_URL;
+const dbUrl = configuredDbUrl
+  ? (configuredDbUrl.startsWith("file:") ? configuredDbUrl : `file:${configuredDbUrl}`)
+  : `file:${path.join(process.cwd(), "prisma", "dev.db")}`;
+const adapter = new PrismaBetterSqlite3({ url: dbUrl });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log("🌱 Seeding database...");
+  await prisma.auditEvent.deleteMany();
+  await prisma.approval.deleteMany();
+  await prisma.ticket.deleteMany();
+  await prisma.productionEntry.deleteMany();
+  await prisma.quantityBudget.deleteMany();
+  await prisma.budgetLine.deleteMany();
+  await prisma.budget.deleteMany();
+  await prisma.dailyLog.deleteMany();
+  await prisma.meeting.deleteMany();
+  await prisma.submittal.deleteMany();
+  await prisma.rFI.deleteMany();
+  await prisma.document.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.threadMessage.deleteMany();
+  await prisma.thread.deleteMany();
+  await prisma.workflowRun.deleteMany();
+  await prisma.punchItem.deleteMany();
+  await prisma.safetyIncident.deleteMany();
+  await prisma.project.deleteMany();
+  await prisma.workflowTemplate.deleteMany();
+  await prisma.contact.deleteMany();
+  await prisma.company.deleteMany();
+  await prisma.membership.deleteMany();
+  await prisma.businessUnit.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.tenant.deleteMany();
 
-  // Create admin user - Sheila Schneider
-  const sheilaPass = await bcrypt.hash("HolyFace2024!", 12);
-  const sheila = await prisma.user.upsert({
-    where: { email: "sheila@holyfacechurch.org" },
-    update: {},
-    create: {
-      name: "Sheila Schneider",
-      email: "sheila@holyfacechurch.org",
-      password: sheilaPass,
-      role: "ADMIN",
-      phone: "301-555-0101",
+  const password = await bcrypt.hash("demo1234", 10);
+
+  const [admin, exec, pm, superintendent] = await Promise.all([
+    prisma.user.create({ data: { name: "Morgan Admin", email: "admin@construction.local", password } }),
+    prisma.user.create({ data: { name: "Elena Executive", email: "exec@construction.local", password } }),
+    prisma.user.create({ data: { name: "Paula PM", email: "pm@construction.local", password } }),
+    prisma.user.create({ data: { name: "Sam Superintendent", email: "super@construction.local", password } }),
+  ]);
+
+  const tenant = await prisma.tenant.create({
+    data: {
+      name: "Jah Construction Group",
+      slug: "jah-construction",
+      primaryMode: ProjectMode.VERTICAL,
+      enabledModes: JSON.stringify([ProjectMode.SIMPLE, ProjectMode.VERTICAL, ProjectMode.HEAVY_CIVIL]),
+      featurePacks: JSON.stringify(["job-thread", "rfis", "heavy-civil-production", "historical-bid-intelligence"]),
+      terminology: JSON.stringify({ project: "Project", thread: "Job Thread", observation: "Punch Item" }),
+      brandingTheme: "slate-gold",
     },
   });
-  console.log("✅ Created admin: Sheila Schneider");
 
-  // Create director - Susan Beall
-  const susanPass = await bcrypt.hash("HolyFace2024!", 12);
-  const susan = await prisma.user.upsert({
-    where: { email: "susan@holyfacechurch.org" },
-    update: {},
-    create: {
-      name: "Susan Beall",
-      email: "susan@holyfacechurch.org",
-      password: susanPass,
-      role: "DIRECTOR",
-      phone: "301-555-0102",
-    },
+  const [commercial, civil] = await Promise.all([
+    prisma.businessUnit.create({ data: { tenantId: tenant.id, name: "Commercial Buildings", code: "COMM", defaultMode: ProjectMode.VERTICAL, region: "Southeast" } }),
+    prisma.businessUnit.create({ data: { tenantId: tenant.id, name: "Heavy Civil", code: "CIVIL", defaultMode: ProjectMode.HEAVY_CIVIL, region: "Carolinas" } }),
+  ]);
+
+  await prisma.membership.createMany({
+    data: [
+      { tenantId: tenant.id, userId: admin.id, businessUnitId: commercial.id, roleTemplate: UserRoleTemplate.ADMIN },
+      { tenantId: tenant.id, userId: exec.id, businessUnitId: commercial.id, roleTemplate: UserRoleTemplate.EXECUTIVE },
+      { tenantId: tenant.id, userId: pm.id, businessUnitId: commercial.id, roleTemplate: UserRoleTemplate.MANAGER },
+      { tenantId: tenant.id, userId: superintendent.id, businessUnitId: civil.id, roleTemplate: UserRoleTemplate.SUPERINTENDENT },
+    ],
   });
-  console.log("✅ Created director: Susan Beall");
 
-  // Create catechists
-  const catechistData = [
-    { name: "Mary Johnson", email: "mary.johnson@holyfacechurch.org", phone: "301-555-0201" },
-    { name: "Robert Smith", email: "robert.smith@holyfacechurch.org", phone: "301-555-0202" },
-    { name: "Patricia Williams", email: "patricia.williams@holyfacechurch.org", phone: "301-555-0203" },
-    { name: "James Brown", email: "james.brown@holyfacechurch.org", phone: "301-555-0204" },
-    { name: "Linda Davis", email: "linda.davis@holyfacechurch.org", phone: "301-555-0205" },
-    { name: "Michael Wilson", email: "michael.wilson@holyfacechurch.org", phone: "301-555-0206" },
-    { name: "Barbara Martinez", email: "barbara.martinez@holyfacechurch.org", phone: "301-555-0207" },
-    { name: "David Anderson", email: "david.anderson@holyfacechurch.org", phone: "301-555-0208" },
-    { name: "Jennifer Taylor", email: "jennifer.taylor@holyfacechurch.org", phone: "301-555-0209" },
-    { name: "Thomas Thomas", email: "thomas.thomas@holyfacechurch.org", phone: "301-555-0210" },
-  ];
+  const ownerCompany = await prisma.company.create({
+    data: { tenantId: tenant.id, name: "Atlantic Development Partners", companyType: "Owner", market: "Multifamily", region: "Charleston" },
+  });
+  await prisma.contact.createMany({
+    data: [
+      { tenantId: tenant.id, companyId: ownerCompany.id, name: "Taylor Reed", email: "treed@atlantic.example", roleTitle: "Owner Rep" },
+      { tenantId: tenant.id, name: "Jordan Cruz", email: "jcruz@gc.example", roleTitle: "Project Engineer" },
+    ],
+  });
 
-  const catechistUsers = [];
-  for (const c of catechistData) {
-    const pass = await bcrypt.hash("HolyFace2024!", 12);
-    const user = await prisma.user.upsert({
-      where: { email: c.email },
-      update: {},
-      create: {
-        ...c,
-        password: pass,
-        role: "CATECHIST",
-        catechist: {
-          create: {
-            certifications: JSON.stringify(["Safe Environment Training", "Called to Protect"]),
-            backgroundCheckDate: new Date("2023-08-01"),
-            backgroundCheckExp: new Date("2025-08-01"),
-          },
-        },
-      },
-      include: { catechist: true },
-    });
-    catechistUsers.push(user);
-  }
-  console.log(`✅ Created ${catechistData.length} catechists`);
+  await prisma.workflowTemplate.createMany({
+    data: [
+      { tenantId: tenant.id, name: "Vertical Startup", mode: ProjectMode.VERTICAL, module: "project-core", configJson: JSON.stringify({ rfis: true, submittals: true, drawings: true, closeoutChecklist: true }) },
+      { tenantId: tenant.id, name: "Heavy Civil Daily Production", mode: ProjectMode.HEAVY_CIVIL, module: "field-operations", configJson: JSON.stringify({ tickets: true, quantities: true, equipment: true, locationTags: true }) },
+      { tenantId: tenant.id, name: "Simple Remodel Launch", mode: ProjectMode.SIMPLE, module: "job-thread", configJson: JSON.stringify({ homeownerPortal: true, punchList: true, approvalsInline: true }) },
+    ],
+  });
 
-  // Create classes for each grade level
-  const classData = [
-    { name: "Pre-K Faith Formation", gradeLevel: "PRE_K", program: "Pre-K Faith Formation", room: "Room 101", dayOfWeek: "Sunday", startTime: "09:00", endTime: "10:00" },
-    { name: "Kindergarten Faith Formation", gradeLevel: "KINDERGARTEN", program: "Elementary Faith Formation", room: "Room 102", dayOfWeek: "Sunday", startTime: "09:00", endTime: "10:00" },
-    { name: "1st Grade Faith Formation", gradeLevel: "GRADE_1", program: "Elementary Faith Formation", room: "Room 103", dayOfWeek: "Sunday", startTime: "09:00", endTime: "10:15" },
-    { name: "2nd Grade - First Communion Prep", gradeLevel: "GRADE_2", program: "First Communion Prep", room: "Room 104", dayOfWeek: "Sunday", startTime: "09:00", endTime: "10:30" },
-    { name: "3rd Grade Faith Formation", gradeLevel: "GRADE_3", program: "Elementary Faith Formation", room: "Room 105", dayOfWeek: "Sunday", startTime: "09:00", endTime: "10:15" },
-    { name: "4th Grade Faith Formation", gradeLevel: "GRADE_4", program: "Elementary Faith Formation", room: "Room 106", dayOfWeek: "Sunday", startTime: "09:00", endTime: "10:15" },
-    { name: "5th Grade Faith Formation", gradeLevel: "GRADE_5", program: "Elementary Faith Formation", room: "Room 107", dayOfWeek: "Sunday", startTime: "09:00", endTime: "10:15" },
-    { name: "6th Grade Faith Formation", gradeLevel: "GRADE_6", program: "Middle School Faith Formation", room: "Room 201", dayOfWeek: "Wednesday", startTime: "18:30", endTime: "20:00" },
-    { name: "7th Grade Faith Formation", gradeLevel: "GRADE_7", program: "Middle School Faith Formation", room: "Room 202", dayOfWeek: "Wednesday", startTime: "18:30", endTime: "20:00" },
-    { name: "8th Grade - Confirmation Prep", gradeLevel: "GRADE_8", program: "Confirmation Prep", room: "Room 203", dayOfWeek: "Wednesday", startTime: "18:30", endTime: "20:00" },
-    { name: "Adult Faith Formation", gradeLevel: "ADULT", program: "Adult Faith Formation", room: "Parish Hall", dayOfWeek: "Tuesday", startTime: "19:00", endTime: "20:30" },
-    { name: "RCIA - Rite of Christian Initiation", gradeLevel: "ADULT", program: "RCIA", room: "Meeting Room A", dayOfWeek: "Thursday", startTime: "19:00", endTime: "20:30" },
-  ];
-
-  const classes = [];
-  for (let i = 0; i < classData.length; i++) {
-    const cls = await prisma.class.upsert({
-      where: { id: `class-${i}` },
-      update: {},
-      create: {
-        id: `class-${i}`,
-        ...classData[i],
-        gradeLevel: classData[i].gradeLevel as any,
-        academicYear: "2024-2025",
-      },
-    });
-    classes.push(cls);
-  }
-  console.log(`✅ Created ${classData.length} classes`);
-
-  // Assign catechists to classes
-  const catechists = await prisma.catechist.findMany();
-  for (let i = 0; i < classes.length; i++) {
-    const catechistIdx = i % catechists.length;
-    await prisma.classCatechist.upsert({
-      where: { classId_catechistId: { classId: classes[i].id, catechistId: catechists[catechistIdx].id } },
-      update: {},
-      create: {
-        classId: classes[i].id,
-        catechistId: catechists[catechistIdx].id,
-        isPrimary: true,
-      },
-    });
-  }
-  console.log("✅ Assigned catechists to classes");
-
-  // Create sample students
-  const studentData = [
-    // 2nd grade (First Communion)
-    { firstName: "Emma", lastName: "Collins", gradeLevel: "GRADE_2", dateOfBirth: "2016-03-15" },
-    { firstName: "Noah", lastName: "Peterson", gradeLevel: "GRADE_2", dateOfBirth: "2016-07-22" },
-    { firstName: "Olivia", lastName: "Garcia", gradeLevel: "GRADE_2", dateOfBirth: "2016-11-08" },
-    // 8th grade (Confirmation)
-    { firstName: "Liam", lastName: "Thompson", gradeLevel: "GRADE_8", dateOfBirth: "2010-01-14" },
-    { firstName: "Sophia", lastName: "White", gradeLevel: "GRADE_8", dateOfBirth: "2010-05-30" },
-    { firstName: "Mason", lastName: "Harris", gradeLevel: "GRADE_8", dateOfBirth: "2010-09-18" },
-    // 1st grade
-    { firstName: "Isabella", lastName: "Clark", gradeLevel: "GRADE_1", dateOfBirth: "2017-04-11" },
-    { firstName: "Ethan", lastName: "Lewis", gradeLevel: "GRADE_1", dateOfBirth: "2017-08-25" },
-    // 5th grade
-    { firstName: "Ava", lastName: "Robinson", gradeLevel: "GRADE_5", dateOfBirth: "2013-02-19" },
-    { firstName: "James", lastName: "Walker", gradeLevel: "GRADE_5", dateOfBirth: "2013-06-07" },
-    // 6th grade
-    { firstName: "Charlotte", lastName: "Hall", gradeLevel: "GRADE_6", dateOfBirth: "2012-10-03" },
-    { firstName: "Benjamin", lastName: "Young", gradeLevel: "GRADE_6", dateOfBirth: "2012-12-27" },
-    // Kindergarten
-    { firstName: "Amelia", lastName: "Allen", gradeLevel: "KINDERGARTEN", dateOfBirth: "2018-06-14" },
-    { firstName: "Lucas", lastName: "King", gradeLevel: "KINDERGARTEN", dateOfBirth: "2018-09-01" },
-    // Pre-K
-    { firstName: "Mia", lastName: "Wright", gradeLevel: "PRE_K", dateOfBirth: "2019-03-22" },
-    { firstName: "Henry", lastName: "Scott", gradeLevel: "PRE_K", dateOfBirth: "2019-07-16" },
-  ];
-
-  const students = [];
-  for (const s of studentData) {
-    const student = await prisma.student.create({
+  const projects = await Promise.all([
+    prisma.project.create({
       data: {
-        ...s,
-        gradeLevel: s.gradeLevel as any,
-        dateOfBirth: new Date(s.dateOfBirth),
+        tenantId: tenant.id,
+        businessUnitId: commercial.id,
+        name: "Harbor Point Residences",
+        code: "HPR-001",
+        mode: ProjectMode.VERTICAL,
+        stage: ProjectStage.ACTIVE,
+        address: "12 Cooper St, Charleston, SC",
+        ownerName: ownerCompany.name,
+        contractType: "GMP",
+        contractValue: 28500000,
+        marginTargetPct: 12.5,
+        progressPct: 41,
+        healthScore: 82,
+        startDate: new Date("2026-02-01"),
+        endDate: new Date("2027-06-15"),
+        configurationJson: JSON.stringify({ dashboard: "vertical", aiBootstrapEnabled: true, requiredForms: ["RFI", "Submittal", "Meeting Minutes"] }),
       },
-    });
-    students.push(student);
-  }
-  console.log(`✅ Created ${studentData.length} students`);
-
-  // Create parent users and link to students
-  const parentData = [
-    { name: "Thomas Collins", email: "thomas.collins@example.com", studentIdx: 0 },
-    { name: "Maria Peterson", email: "maria.peterson@example.com", studentIdx: 1 },
-    { name: "Carlos Garcia", email: "carlos.garcia@example.com", studentIdx: 2 },
-    { name: "Karen Thompson", email: "karen.thompson@example.com", studentIdx: 3 },
-    { name: "David White", email: "david.white@example.com", studentIdx: 4 },
-  ];
-
-  for (const p of parentData) {
-    const pass = await bcrypt.hash("parent123", 12);
-    const parent = await prisma.user.upsert({
-      where: { email: p.email },
-      update: {},
-      create: {
-        name: p.name,
-        email: p.email,
-        password: pass,
-        role: "PARENT",
-        phone: "301-555-0300",
-      },
-    });
-    await prisma.studentParent.upsert({
-      where: { studentId_userId: { studentId: students[p.studentIdx].id, userId: parent.id } },
-      update: {},
-      create: {
-        studentId: students[p.studentIdx].id,
-        userId: parent.id,
-        relationship: "Parent",
-        isPrimary: true,
-      },
-    });
-  }
-  console.log("✅ Created parent accounts");
-
-  // Enroll students in their grade-level classes
-  const gradeClassMap: Record<string, string> = {
-    PRE_K: "class-0",
-    KINDERGARTEN: "class-1",
-    GRADE_1: "class-2",
-    GRADE_2: "class-3",
-    GRADE_3: "class-4",
-    GRADE_4: "class-5",
-    GRADE_5: "class-6",
-    GRADE_6: "class-7",
-    GRADE_7: "class-8",
-    GRADE_8: "class-9",
-    ADULT: "class-10",
-  };
-
-  for (const student of students) {
-    const classId = gradeClassMap[student.gradeLevel];
-    if (classId) {
-      await prisma.enrollment.upsert({
-        where: { studentId_classId: { studentId: student.id, classId } },
-        update: {},
-        create: { studentId: student.id, classId, active: true },
-      });
-    }
-  }
-  console.log("✅ Enrolled students in classes");
-
-  // Create sacrament records
-  for (const student of students) {
-    // Baptism - all students
-    await prisma.sacramentRecord.upsert({
-      where: { studentId_sacramentType: { studentId: student.id, sacramentType: "Baptism" } },
-      update: {},
-      create: {
-        studentId: student.id,
-        sacramentType: "Baptism",
-        status: "COMPLETED",
-        completionDate: new Date(student.dateOfBirth!.getTime() + 30 * 24 * 60 * 60 * 1000),
-        notes: "Received at Holy Face Church",
-      },
-    });
-
-    // 2nd graders - First Communion prep
-    if (student.gradeLevel === "GRADE_2") {
-      await prisma.sacramentRecord.upsert({
-        where: { studentId_sacramentType: { studentId: student.id, sacramentType: "First Reconciliation" } },
-        update: {},
-        create: {
-          studentId: student.id,
-          sacramentType: "First Reconciliation",
-          status: "IN_PROGRESS",
-          startDate: new Date("2024-09-01"),
-          notes: "Preparing for First Reconciliation",
-        },
-      });
-      await prisma.sacramentRecord.upsert({
-        where: { studentId_sacramentType: { studentId: student.id, sacramentType: "First Communion" } },
-        update: {},
-        create: {
-          studentId: student.id,
-          sacramentType: "First Communion",
-          status: "IN_PROGRESS",
-          startDate: new Date("2024-09-01"),
-          notes: "Preparing for First Communion - Spring 2025",
-        },
-      });
-    }
-
-    // 8th graders - Confirmation prep
-    if (student.gradeLevel === "GRADE_8") {
-      await prisma.sacramentRecord.upsert({
-        where: { studentId_sacramentType: { studentId: student.id, sacramentType: "Confirmation" } },
-        update: {},
-        create: {
-          studentId: student.id,
-          sacramentType: "Confirmation",
-          status: "IN_PROGRESS",
-          startDate: new Date("2024-09-01"),
-          notes: "Confirmation Spring 2025",
-          milestones: JSON.stringify([
-            { name: "Sponsor selected", completed: true },
-            { name: "Saint name chosen", completed: true },
-            { name: "Service hours (20 hrs)", completed: false },
-            { name: "Retreat attendance", completed: false },
-            { name: "Letter to bishop", completed: false },
-          ]),
-        },
-      });
-    }
-  }
-  console.log("✅ Created sacrament records");
-
-  // Create class sessions with attendance
-  const now = new Date();
-  const grade2Class = classes[3]; // 2nd grade
-  const grade8Class = classes[9]; // 8th grade
-  const grade2Students = students.filter((s) => s.gradeLevel === "GRADE_2");
-  const grade8Students = students.filter((s) => s.gradeLevel === "GRADE_8");
-
-  for (let weekBack = 8; weekBack >= 1; weekBack--) {
-    const sessionDate = new Date(now);
-    sessionDate.setDate(sessionDate.getDate() - weekBack * 7);
-
-    // 2nd grade session
-    const session2 = await prisma.classSession.create({
+    }),
+    prisma.project.create({
       data: {
-        classId: grade2Class.id,
-        date: sessionDate,
-        topic: ["Introduction to the Sacraments", "The Story of Jesus", "Prayer and Mass", "The Ten Commandments", "God's Love", "The Holy Spirit", "First Reconciliation Prep", "First Communion Prep"][weekBack - 1],
+        tenantId: tenant.id,
+        businessUnitId: civil.id,
+        name: "Ravenel Utility Package A",
+        code: "RUPA-101",
+        mode: ProjectMode.HEAVY_CIVIL,
+        stage: ProjectStage.ACTIVE,
+        address: "Ravenel, SC",
+        ownerName: "Charleston County",
+        contractType: "Unit Price",
+        contractValue: 9200000,
+        marginTargetPct: 10.2,
+        progressPct: 58,
+        healthScore: 76,
+        startDate: new Date("2026-01-15"),
+        endDate: new Date("2026-11-20"),
+        configurationJson: JSON.stringify({ dashboard: "heavy-civil", locationTracking: true, ticketReconciliation: true, aiBootstrapEnabled: true }),
       },
-    });
-
-    for (const student of grade2Students) {
-      await prisma.attendanceRecord.upsert({
-        where: { sessionId_studentId: { sessionId: session2.id, studentId: student.id } },
-        update: {},
-        create: {
-          sessionId: session2.id,
-          studentId: student.id,
-          status: weekBack === 3 ? "ABSENT" : "PRESENT",
-        },
-      });
-    }
-
-    // 8th grade session
-    const session8 = await prisma.classSession.create({
+    }),
+    prisma.project.create({
       data: {
-        classId: grade8Class.id,
-        date: sessionDate,
-        topic: ["Confirmation Overview", "Who is the Holy Spirit?", "Gifts of the Spirit", "Service & Discipleship", "Prayer Life", "The Church and Sacraments", "Sponsor Relationship", "Preparing Your Heart"][weekBack - 1],
+        tenantId: tenant.id,
+        businessUnitId: commercial.id,
+        name: "Sullivan Kitchen Remodel",
+        code: "SKR-014",
+        mode: ProjectMode.SIMPLE,
+        stage: ProjectStage.ACTIVE,
+        address: "Sullivan's Island, SC",
+        ownerName: "Private Client",
+        contractType: "Lump Sum",
+        contractValue: 185000,
+        marginTargetPct: 18,
+        progressPct: 64,
+        healthScore: 91,
+        startDate: new Date("2026-03-01"),
+        endDate: new Date("2026-05-15"),
+        configurationJson: JSON.stringify({ dashboard: "simple", clientPortal: true, subthreads: ["Selections", "Schedule", "Punch"] }),
+      },
+    }),
+  ]);
+
+  for (const project of projects) {
+    const generalThread = await prisma.thread.create({
+      data: {
+        projectId: project.id,
+        title: `${project.name} Job Thread`,
+        channel: ThreadChannel.GENERAL,
+        isDefault: true,
       },
     });
 
-    for (const student of grade8Students) {
-      await prisma.attendanceRecord.upsert({
-        where: { sessionId_studentId: { sessionId: session8.id, studentId: student.id } },
-        update: {},
-        create: {
-          sessionId: session8.id,
-          studentId: student.id,
-          status: weekBack === 5 ? "EXCUSED" : "PRESENT",
+    await prisma.threadMessage.createMany({
+      data: [
+        { threadId: generalThread.id, authorId: admin.id, body: `Project shell bootstrapped for ${project.mode} mode with tenant-aware defaults.`, pinned: true },
+        { threadId: generalThread.id, authorId: pm.id, body: `Kickoff complete. Tracking next actions, documents, and approvals in the default job thread.`, decisionFlag: true },
+      ],
+    });
+
+    await prisma.task.createMany({
+      data: [
+        {
+          projectId: project.id,
+          title: project.mode === ProjectMode.VERTICAL ? "Publish drawing register" : project.mode === ProjectMode.HEAVY_CIVIL ? "Validate pay item structure" : "Confirm client finish selections",
+          description: "Seeded from mode-specific startup template",
+          status: TaskStatus.IN_PROGRESS,
+          priority: "High",
+          dueDate: new Date("2026-04-10"),
+          assigneeId: pm.id,
+          sourceType: "workflow-template",
+        },
+        {
+          projectId: project.id,
+          title: project.mode === ProjectMode.VERTICAL ? "Issue first submittal package" : project.mode === ProjectMode.HEAVY_CIVIL ? "Reconcile hauling tickets" : "Update homeowner daily summary",
+          status: TaskStatus.TODO,
+          priority: "Medium",
+          dueDate: new Date("2026-04-12"),
+          assigneeId: superintendent.id,
+          sourceType: "job-thread",
+        },
+      ],
+    });
+
+    await prisma.document.createMany({
+      data: [
+        { projectId: project.id, title: `${project.code} Contract Overview`, documentClass: DocumentClass.CONTRACT, folderPath: "/contracts", metadataJson: JSON.stringify({ source: "seed", version: 1 }) },
+        { projectId: project.id, title: `${project.code} Startup Package`, documentClass: project.mode === ProjectMode.VERTICAL ? DocumentClass.DRAWING : DocumentClass.OTHER, folderPath: "/startup", metadataJson: JSON.stringify({ aiBootstrapCandidate: true }) },
+      ],
+    });
+
+    await prisma.dailyLog.create({
+      data: {
+        projectId: project.id,
+        logDate: new Date("2026-04-07"),
+        weather: project.mode === ProjectMode.HEAVY_CIVIL ? "68F, clear, low wind" : "72F, partly cloudy",
+        summary: project.mode === ProjectMode.VERTICAL ? "Curtainwall coordination ongoing, MEP overhead rough-in on Levels 3-4." : project.mode === ProjectMode.HEAVY_CIVIL ? "Installed 420 LF of 12in water main, trucking balanced with utility conflict watch." : "Cabinet install 80% complete; owner approved backsplash options.",
+        manpower: project.mode === ProjectMode.SIMPLE ? 8 : project.mode === ProjectMode.VERTICAL ? 64 : 27,
+        notes: "Seeded daily report for dashboard demo.",
+      },
+    });
+
+    const budget = await prisma.budget.create({
+      data: {
+        projectId: project.id,
+        name: "Current Control Budget",
+        originalValue: project.contractValue ?? 0,
+        currentValue: (project.contractValue ?? 0) * 1.04,
+        forecastFinal: (project.contractValue ?? 0) * 1.03,
+      },
+    });
+
+    await prisma.budgetLine.createMany({
+      data: project.mode === ProjectMode.HEAVY_CIVIL
+        ? [
+            { budgetId: budget.id, code: "2010", description: "Earthwork / Excavation", lineType: BudgetLineType.COST_CODE, budgetAmount: 2200000, committedCost: 1900000, actualCost: 1280000 },
+            { budgetId: budget.id, code: "P-014", description: "12in Water Main", lineType: BudgetLineType.PAY_ITEM, budgetAmount: 1450000, committedCost: 1300000, actualCost: 840000 },
+          ]
+        : [
+            { budgetId: budget.id, code: "033000", description: project.mode === ProjectMode.VERTICAL ? "Cast-in-place concrete" : "Cabinet and finish package", lineType: BudgetLineType.COST_CODE, budgetAmount: project.mode === ProjectMode.VERTICAL ? 5200000 : 74000, committedCost: project.mode === ProjectMode.VERTICAL ? 4800000 : 61000, actualCost: project.mode === ProjectMode.VERTICAL ? 2600000 : 42000 },
+            { budgetId: budget.id, code: "CO-001", description: "Owner-directed changes", lineType: BudgetLineType.ALLOWANCE, budgetAmount: project.mode === ProjectMode.VERTICAL ? 350000 : 12000, committedCost: project.mode === ProjectMode.VERTICAL ? 120000 : 7000, actualCost: project.mode === ProjectMode.VERTICAL ? 82000 : 5000 },
+          ],
+    });
+
+    if (project.mode !== ProjectMode.SIMPLE) {
+      await prisma.rFI.create({
+        data: {
+          projectId: project.id,
+          number: project.mode === ProjectMode.VERTICAL ? "RFI-012" : "RFI-CIV-004",
+          subject: project.mode === ProjectMode.VERTICAL ? "Curtainwall embed elevation conflict" : "Utility crossing depth clarification",
+          status: WorkflowStatus.UNDER_REVIEW,
+          dueDate: new Date("2026-04-11"),
+          ballInCourt: "Design Team",
+        },
+      });
+
+      await prisma.submittal.create({
+        data: {
+          projectId: project.id,
+          number: project.mode === ProjectMode.VERTICAL ? "SUB-033" : "SUB-CIV-008",
+          title: project.mode === ProjectMode.VERTICAL ? "Storefront system" : "Ductile iron pipe and fittings",
+          specSection: project.mode === ProjectMode.VERTICAL ? "084113" : "331111",
+          status: WorkflowStatus.UNDER_REVIEW,
+          longLead: project.mode === ProjectMode.VERTICAL,
         },
       });
     }
-  }
-  console.log("✅ Created class sessions and attendance records");
 
-  // Create upcoming events
-  const eventData = [
-    {
-      title: "First Reconciliation",
-      description: "2nd Grade First Reconciliation Ceremony",
-      eventType: "SACRAMENT",
-      startDate: new Date(now.getFullYear(), now.getMonth() + 1, 15, 10, 0),
-      location: "Holy Face Church",
-    },
-    {
-      title: "Confirmation Retreat",
-      description: "8th Grade Confirmation Retreat at Camp Maria",
-      eventType: "RETREAT",
-      startDate: new Date(now.getFullYear(), now.getMonth() + 1, 22, 8, 0),
-      endDate: new Date(now.getFullYear(), now.getMonth() + 1, 23, 17, 0),
-      location: "Camp Maria, Leonardtown MD",
-    },
-    {
-      title: "First Communion",
-      description: "2nd Grade First Holy Communion Mass",
-      eventType: "SACRAMENT",
-      startDate: new Date(now.getFullYear(), now.getMonth() + 2, 10, 11, 0),
-      location: "Holy Face Church",
-    },
-    {
-      title: "Confirmation",
-      description: "8th Grade Confirmation Mass — Bishop Burbidge presiding",
-      eventType: "SACRAMENT",
-      startDate: new Date(now.getFullYear(), now.getMonth() + 2, 18, 19, 0),
-      location: "Holy Face Church",
-    },
-    {
-      title: "End of Year Family Picnic",
-      description: "Annual Faith Formation End-of-Year Celebration",
-      eventType: "PARISH",
-      startDate: new Date(now.getFullYear(), now.getMonth() + 2, 25, 12, 0),
-      location: "Parish Grounds",
-      allDay: false,
-    },
-    {
-      title: "Catechist Training Day",
-      description: "Fall 2025 Catechist Training and Formation Day",
-      eventType: "OTHER",
-      startDate: new Date(now.getFullYear(), now.getMonth() + 3, 5, 9, 0),
-      endDate: new Date(now.getFullYear(), now.getMonth() + 3, 5, 16, 0),
-      location: "Parish Hall",
-    },
-  ];
+    if (project.mode === ProjectMode.HEAVY_CIVIL) {
+      await prisma.quantityBudget.createMany({
+        data: [
+          { projectId: project.id, code: "P-014", description: "12in Water Main", unit: "LF", budgetQty: 5200, installedQty: 3010, earnedQty: 2890, locationTag: "STA 10+00 to 41+20" },
+          { projectId: project.id, code: "P-021", description: "Manhole Structure", unit: "EA", budgetQty: 18, installedQty: 10, earnedQty: 10, locationTag: "Segment B" },
+        ],
+      });
 
-  for (const event of eventData) {
-    await prisma.event.create({ data: event as any });
-  }
-  console.log("✅ Created upcoming events");
+      await prisma.productionEntry.createMany({
+        data: [
+          { projectId: project.id, activity: "12in DIP install", crewName: "Pipe Crew 1", installedQty: 420, unit: "LF", productionRate: 52.5, equipmentHours: 18, locationTag: "STA 24+00 to 28+20" },
+          { projectId: project.id, activity: "Backfill and compaction", crewName: "Earthwork Crew", installedQty: 380, unit: "CY", productionRate: 47.5, equipmentHours: 12, locationTag: "Segment B" },
+        ],
+      });
 
-  // Create announcements
-  const announcements = [
-    {
-      title: "Welcome to Faith Formation 2024-2025!",
-      body: "We are so excited to welcome all our students and families to another wonderful year of Faith Formation at Holy Face Church. Our classes begin September 8th. Please ensure all registration forms are complete.",
-      targetGroup: "ALL",
-      authorId: sheila.id,
-    },
-    {
-      title: "First Communion Preparation Beginning",
-      body: "2nd Grade families: Preparation for First Holy Communion officially begins this Sunday. Please make sure your child has their Baptismal certificate on file. Contact Susan Beall with questions.",
-      targetGroup: "GRADE_2",
-      authorId: susan.id,
-    },
-    {
-      title: "Confirmation Retreat Registration Open",
-      body: "8th Grade students: Registration for the Confirmation Retreat at Camp Maria is now open. This is a required retreat for Confirmation. Forms due by end of next week.",
-      targetGroup: "GRADE_8",
-      authorId: sheila.id,
-    },
-  ];
+      await prisma.ticket.createMany({
+        data: [
+          { projectId: project.id, ticketNumber: "T-24017", materialType: "Fill Sand", quantity: 24, unit: "TON", source: "Ladson Quarry", destination: "Segment B" },
+          { projectId: project.id, ticketNumber: "T-24018", materialType: "12in DIP", quantity: 420, unit: "LF", source: "Pipe Yard", destination: "STA 24+00" },
+        ],
+      });
+    }
 
-  for (const a of announcements) {
-    await prisma.announcement.create({
-      data: { ...a, sentAt: new Date() },
+    if (project.mode === ProjectMode.VERTICAL) {
+      await prisma.meeting.create({
+        data: {
+          projectId: project.id,
+          title: "OAC Coordination Meeting",
+          meetingType: "OAC",
+          scheduledAt: new Date("2026-04-09T14:00:00Z"),
+          notes: "Submittal aging, procurement risks, and Level 4 rough-in coordination.",
+        },
+      });
+    }
+
+    await prisma.auditEvent.create({
+      data: {
+        tenantId: tenant.id,
+        actorId: admin.id,
+        entityType: "Project",
+        entityId: project.id,
+        action: "SEEDED",
+        afterJson: JSON.stringify({ mode: project.mode, stage: project.stage }),
+        source: "prisma-seed",
+      },
     });
   }
-  console.log("✅ Created announcements");
-
-  console.log("\n🎉 Seed complete!");
-  console.log("\n📧 Login credentials:");
-  console.log("   Admin:    sheila@holyfacechurch.org / HolyFace2024!");
-  console.log("   Director: susan@holyfacechurch.org / HolyFace2024!");
-  console.log("   Catechist: mary.johnson@holyfacechurch.org / HolyFace2024!");
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .then(async () => {
+    await prisma.$disconnect();
+  })
+  .catch(async (error) => {
+    console.error(error);
+    await prisma.$disconnect();
+    process.exit(1);
+  });

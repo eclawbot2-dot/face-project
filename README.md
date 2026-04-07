@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# construction-project
 
-## Getting Started
+Enterprise multi-tenant construction management platform MVP foundation.
 
-First, run the development server:
+## What this repo now contains
+
+A serious starter implementation for a single-codebase construction platform that supports three operating modes:
+
+- Simple Construction Project Management
+- Vertical Building Construction
+- Heavy Civil Construction
+
+The app is built as a Next.js + TypeScript + Prisma baseline with seeded demo data that shows how tenant mode, business-unit mode, and project mode can drive different behavior from one shared architecture.
+
+## Stack
+
+- Next.js 16
+- TypeScript
+- Prisma ORM
+- SQLite for local prototyping
+- Postgres-oriented schema design for future production promotion
+- Tailwind CSS 4
+
+## MVP foundation included
+
+### Shared enterprise core
+- Multi-tenant data model
+- Business units and tenant-level configuration
+- Memberships and named role templates
+- Project master data
+- Workflow templates / workflow runs
+- Audit events
+- Document registry
+- Job thread / communication hub
+- Tasks
+- Daily logs
+- Budget and budget lines
+
+### Vertical mode starter
+- RFIs
+- Submittals
+- Meetings
+- Drawing/spec-capable document classes
+- Vertical-specific dashboard defaults
+
+### Heavy civil mode starter
+- Quantity budgets
+- Production entries
+- Ticket tracking
+- Location/segment tagging support
+- Heavy-civil-specific dashboard defaults
+
+### Simple mode starter
+- Job-thread-first UX
+- Lightweight tasks and budget visibility
+- Client-friendly operating model defaults
+
+## Local setup
 
 ```bash
+npm install
+npm run setup
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs on http://localhost:3101
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo login users
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+All seeded users use password:
 
-## Learn More
+```text
+demo1234
+```
 
-To learn more about Next.js, take a look at the following resources:
+Seeded users:
+- admin@construction.local
+- exec@construction.local
+- pm@construction.local
+- super@construction.local
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Important files
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `prisma/schema.prisma` — core multi-tenant domain model
+- `prisma/seed.ts` — demo tenant, projects, workflows, budgets, RFIs, production, tickets
+- `src/lib/dashboard.ts` — aggregate data loader and mode-aware dashboard shaping
+- `src/app/page.tsx` — enterprise dashboard UI with Simple / Vertical / Heavy Civil cards
+- `docs/architecture.md` — implementation architecture
+- `docs/data-model.md` — ERD-style model notes
+- `docs/implementation-plan.md` — phased build plan
 
-## Deploy on Vercel
+## Notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Local dev uses SQLite to make the repo immediately runnable.
+- Production should migrate to Postgres and object storage.
+- Auth scaffolding from the baseline stack remains available, but the landing experience is currently focused on showcasing the construction operating model and shared architecture.
+- This is intentionally a strong MVP foundation / vertical slice, not a fully complete Procore replacement in one commit.
