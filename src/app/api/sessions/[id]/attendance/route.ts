@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
+import { notifyAttendanceAbsent } from "@/lib/notifications";
 
 const ATTENDANCE_STATUSES = ["PRESENT", "ABSENT", "EXCUSED", "LATE"] as const;
 
@@ -92,7 +93,47 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     metadata: { count: upserts.length },
   });
 
+  // Fire absence notifications for any newly-absent students. Best-effort
+  // and non-blocking — the response returns immediately whether or not the
+  // SMTP transport accepts. If SMTP isn't configured the notification is
+  // recorded in AuditLog so directors can audit what would have gone out.
+  void fireAbsenceNotifications(sessionId, parsed.data.records).catch((err) => {
+    console.error("[attendance] absence notification dispatch failed", err);
+  });
+
   return NextResponse.json(upserts);
+}
+
+async function fireAbsenceNotifications(
+  sessionId: string,
+  records: Array<{ studentId: string; status: string }>,
+) {
+  const absent = records.filter((r) => r.status === "ABSENT");
+  if (absent.length === 0) return;
+
+  const session = await prisma.classSession.findUnique({
+    where: { id: sessionId },
+    select: { date: true, class: { select: { name: true } } },
+  });
+  if (!session) return;
+
+  const studentIds = absent.map((r) => r.studentId);
+  const students = await prisma.student.findMany({
+    where: { id: { in: studentIds } },
+    include: { parents: { include: { user: true } } },
+  });
+
+  for (const student of students) {
+    const primary = student.parents.find((p) => p.isPrimary) ?? student.parents[0];
+    if (!primary?.user.email) continue;
+    await notifyAttendanceAbsent({
+      parentEmail: primary.user.email,
+      parentName: primary.user.name,
+      studentName: `${student.firstName} ${student.lastName}`,
+      className: session.class.name,
+      sessionDate: session.date,
+    });
+  }
 }
 
 // Bulk apply a single status to many students in one call. Useful for
@@ -117,6 +158,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }),
     ),
   );
+
+  if (status === "ABSENT") {
+    void fireAbsenceNotifications(
+      sessionId,
+      studentIds.map((id) => ({ studentId: id, status: "ABSENT" })),
+    ).catch((err) => console.error("[attendance] bulk absence notification failed", err));
+  }
 
   await recordAudit({
     actorId: authz.userId,
