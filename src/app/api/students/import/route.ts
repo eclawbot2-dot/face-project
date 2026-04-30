@@ -3,6 +3,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import * as XLSX from "xlsx";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
+import { recordAudit } from "@/lib/audit";
+
+const generateTempPassword = () => randomBytes(9).toString("base64url");
 
 // Map common grade strings to our enum values
 function parseGradeLevel(raw: string): string | null {
@@ -92,6 +96,7 @@ export async function POST(req: NextRequest) {
       parentsLinked: 0,
       errors: [] as string[],
       students: [] as Array<{ name: string; grade: string; enrolled: string; parentAdded?: string }>,
+      tempPasswords: [] as Array<{ email: string; password: string }>,
     };
 
     for (let i = 0; i < rows.length; i++) {
@@ -176,8 +181,11 @@ export async function POST(req: NextRequest) {
           try {
             let parentUser = await prisma.user.findUnique({ where: { email: parentEmail } });
             if (!parentUser) {
-              // Generate a temporary password from student last name + "2024!"
-              const tempPassword = `${lastName.toLowerCase().replace(/\s+/g, "")}2024!`;
+              // Random temp password — surfaced in the response so the
+              // importing admin can communicate it through a side-channel.
+              // Predictable patterns (e.g. lastName + year) let anyone who
+              // knows a student's last name take over the parent account.
+              const tempPassword = generateTempPassword();
               const hashed = await bcrypt.hash(tempPassword, 12);
               parentUser = await prisma.user.create({
                 data: {
@@ -189,6 +197,7 @@ export async function POST(req: NextRequest) {
                 },
               });
               results.parentsCreated++;
+              results.tempPasswords.push({ email: parentEmail, password: tempPassword });
             } else {
               results.parentsLinked++;
             }
@@ -218,6 +227,20 @@ export async function POST(req: NextRequest) {
         results.errors.push(`Row ${rowNum} (${firstName} ${lastName}): ${err.message}`);
       }
     }
+
+    const actorId = (session.user as { id?: string })?.id;
+    await recordAudit({
+      actorId,
+      action: "students.import",
+      entityType: "Student",
+      metadata: {
+        imported: results.imported,
+        skipped: results.skipped,
+        parentsCreated: results.parentsCreated,
+        parentsLinked: results.parentsLinked,
+        errorCount: results.errors.length,
+      },
+    });
 
     return NextResponse.json(results);
   } catch (err: any) {

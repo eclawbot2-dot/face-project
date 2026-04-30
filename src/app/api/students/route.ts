@@ -2,15 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { recordAudit } from "@/lib/audit";
 
 const studentSchema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  firstName: z.string().trim().min(1).max(120),
+  lastName: z.string().trim().min(1).max(120),
   dateOfBirth: z.string().optional().nullable(),
-  gradeLevel: z.string(),
-  address: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
+  gradeLevel: z.string().min(1).max(40),
+  address: z.string().max(500).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
 });
+
+const querySchema = z.object({
+  search: z.string().max(120).optional(),
+  grade: z.string().max(40).optional(),
+  active: z.enum(["true", "false", "all"]).optional(),
+  page: z.coerce.number().int().min(1).max(1000).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+const HARD_CAP = 500;
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -23,11 +34,12 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const search = searchParams.get("search") ?? "";
-  const grade = searchParams.get("grade") ?? "";
-  const activeParam = searchParams.get("active") ?? "";
+  const parsed = querySchema.safeParse(Object.fromEntries(searchParams));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid query", issues: parsed.error.issues }, { status: 400 });
+  }
+  const { search = "", grade = "", active: activeParam, page, limit } = parsed.data;
 
-  // Catechists can only see students enrolled in their assigned classes
   let catechistStudentFilter = {};
   if (role === "CATECHIST") {
     const catechist = await prisma.catechist.findUnique({ where: { userId } });
@@ -42,31 +54,53 @@ export async function GET(req: NextRequest) {
     };
   }
 
-  // Determine active filter
   let activeFilter: boolean | undefined = true;
   if (activeParam === "false") activeFilter = false;
   else if (activeParam === "all") activeFilter = undefined;
 
-  const students = await prisma.student.findMany({
-    where: {
-      ...(activeFilter !== undefined ? { active: activeFilter } : {}),
-      ...catechistStudentFilter,
-      ...(search && {
-        OR: [
-          { firstName: { contains: search } },
-          { lastName: { contains: search } },
-        ],
-      }),
-      ...(grade && { gradeLevel: grade as any }),
-    },
-    include: {
-      parents: { include: { user: { select: { name: true, email: true, phone: true } } } },
-      enrollments: { include: { class: true }, where: { active: true } },
-      sacraments: true,
-    },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-  });
+  const where = {
+    ...(activeFilter !== undefined ? { active: activeFilter } : {}),
+    ...catechistStudentFilter,
+    ...(search && {
+      OR: [
+        { firstName: { contains: search } },
+        { lastName: { contains: search } },
+      ],
+    }),
+    ...(grade && { gradeLevel: grade as never }),
+  };
 
+  const include = {
+    parents: { include: { user: { select: { name: true, email: true, phone: true } } } },
+    enrollments: { include: { class: true }, where: { active: true } },
+    sacraments: true,
+  };
+  const orderBy = [{ lastName: "asc" }, { firstName: "asc" }] as const;
+
+  // If page/limit are provided, return a paginated payload.
+  if (page !== undefined || limit !== undefined) {
+    const p = page ?? 1;
+    const l = Math.min(limit ?? 50, 200);
+    const [items, total] = await Promise.all([
+      prisma.student.findMany({
+        where,
+        include,
+        orderBy: [...orderBy],
+        skip: (p - 1) * l,
+        take: l,
+      }),
+      prisma.student.count({ where }),
+    ]);
+    return NextResponse.json({ items, total, page: p, limit: l });
+  }
+
+  // Backwards-compatible unpaged response, capped to prevent OOM on large rosters.
+  const students = await prisma.student.findMany({
+    where,
+    include,
+    orderBy: [...orderBy],
+    take: HARD_CAP,
+  });
   return NextResponse.json(students);
 }
 
@@ -75,11 +109,12 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = (session.user as { role?: string })?.role;
-  if (!["ADMIN", "DIRECTOR"].includes(role ?? "")) {
+  const userId = (session.user as { id?: string })?.id;
+  if (!userId || !["ADMIN", "DIRECTOR"].includes(role ?? "")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = studentSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
@@ -88,10 +123,18 @@ export async function POST(req: NextRequest) {
       firstName: parsed.data.firstName,
       lastName: parsed.data.lastName,
       dateOfBirth: parsed.data.dateOfBirth ? new Date(parsed.data.dateOfBirth) : null,
-      gradeLevel: parsed.data.gradeLevel as any,
-      address: parsed.data.address,
-      notes: parsed.data.notes,
+      gradeLevel: parsed.data.gradeLevel as never,
+      address: parsed.data.address ?? null,
+      notes: parsed.data.notes ?? null,
     },
+  });
+
+  await recordAudit({
+    actorId: userId,
+    action: "student.create",
+    entityType: "Student",
+    entityId: student.id,
+    after: student,
   });
 
   return NextResponse.json(student, { status: 201 });
