@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { recordAudit } from "@/lib/audit";
+import { clientKey, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const generateTempPassword = () => randomBytes(9).toString("base64url");
 
@@ -45,9 +46,18 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const role = (session.user as { role?: string })?.role;
+  const userId = (session.user as { id?: string })?.id;
   if (!["ADMIN", "DIRECTOR"].includes(role ?? "")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // Bulk imports are expensive; cap to a small handful per hour per actor.
+  const limit = rateLimit({
+    key: clientKey(req, "students-import", userId),
+    max: 10,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!limit.ok) return rateLimitResponse(limit);
 
   try {
     const formData = await req.formData();
@@ -228,9 +238,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const actorId = (session.user as { id?: string })?.id;
     await recordAudit({
-      actorId,
+      actorId: userId,
       action: "students.import",
       entityType: "Student",
       metadata: {
