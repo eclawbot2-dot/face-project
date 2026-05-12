@@ -91,7 +91,7 @@ export async function GET() {
   // Hydrate names for the top-5 absent students.
   const absentDetail: Array<{ studentId: string; name: string; absences: number }> = [];
   if (absentByStudent.length > 0) {
-    const ids = absentByStudent.map((r) => r.studentId);
+    const ids = (absentByStudent as Array<{ studentId: string }>).map((r) => r.studentId);
     const students = await prisma.student.findMany({
       where: { id: { in: ids } },
       select: { id: true, firstName: true, lastName: true },
