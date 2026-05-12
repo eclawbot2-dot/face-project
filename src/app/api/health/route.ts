@@ -19,12 +19,16 @@ export async function GET() {
     db = "down";
   }
 
+  const version = process.env.npm_package_version ?? process.env.APP_VERSION ?? "unknown";
+
   return NextResponse.json(
     {
       status: db === "ok" ? "ok" : "degraded",
       db,
       dbLatencyMs,
       uptimeSec: Math.round(process.uptime()),
+      version,
+      node: process.version,
       checkedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
     },

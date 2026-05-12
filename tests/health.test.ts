@@ -22,6 +22,8 @@ describe("GET /api/health", () => {
     expect(body.status).toBe("ok");
     expect(body.db).toBe("ok");
     expect(typeof body.dbLatencyMs).toBe("number");
+    expect(typeof body.version).toBe("string");
+    expect(body.node).toMatch(/^v\d+\./);
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
